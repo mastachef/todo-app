@@ -289,6 +289,10 @@
 }
 
 /* User Menu */
+.user-menu-wrapper {
+    position: relative;
+}
+
 .user-menu {
     position: absolute;
     top: 100%;

@@ -310,8 +310,8 @@ class TaskManager {
             this.saveToLocalStorage();
         }
         
-        if (!this.lists.find(l => l.id === this.currentListId)) {
-            this.currentListId = Number(this.lists[0].id);
+        if (!this.lists.find(l => String(l.id) === String(this.currentListId))) {
+            this.currentListId = this.lists[0]?.id;
         }
         
         this.updateTitle();
@@ -489,7 +489,7 @@ class TaskManager {
                 body: JSON.stringify({ name })
             });
         }
-        const list = this.lists.find(l => l.id === id);
+        const list = this.lists.find(l => String(l.id) === String(id));
         if (list) list.name = name;
         if (!this.isOnline) this.saveToLocalStorage();
     }
@@ -501,8 +501,8 @@ class TaskManager {
                 headers: this.getAuthHeaders()
             });
         }
-        this.lists = this.lists.filter(l => l.id !== id);
-        this.tasks = this.tasks.filter(t => t.list_id !== id);
+        this.lists = this.lists.filter(l => String(l.id) !== String(id));
+        this.tasks = this.tasks.filter(t => String(t.list_id) !== String(id));
         if (!this.isOnline) this.saveToLocalStorage();
     }
     
@@ -515,9 +515,9 @@ class TaskManager {
     }
     
     editList(listId) {
-        const list = this.lists.find(l => l.id === listId);
+        const list = this.lists.find(l => String(l.id) === String(listId));
         if (!list) return;
-        this.editingListId = listId;
+        this.editingListId = list.id;  // Use the actual list ID
         this.listModalTitle.textContent = 'Edit List';
         this.listNameInput.value = list.name;
         this.listDelete.style.display = this.lists.length > 1 ? 'flex' : 'none';
@@ -530,7 +530,7 @@ class TaskManager {
         
         if (this.editingListId) {
             await this.updateList(this.editingListId, name);
-            if (this.editingListId === this.currentListId) {
+            if (String(this.editingListId) === String(this.currentListId)) {
                 this.documentTitle.textContent = name;
                 document.title = name;
             }
@@ -550,8 +550,8 @@ class TaskManager {
         if (this.lists.length <= 1) return;
         await this.deleteList(this.editingListId);
         
-        if (this.currentListId === this.editingListId) {
-            this.currentListId = Number(this.lists[0].id);
+        if (String(this.currentListId) === String(this.editingListId)) {
+            this.currentListId = this.lists[0]?.id;
             this.updateTitle();
         }
         
@@ -561,10 +561,10 @@ class TaskManager {
     }
     
     switchList(listId) {
-        // Normalize listId to number for consistent comparison
-        const normalizedId = Number(listId);
-        if (normalizedId === Number(this.currentListId)) return;
-        this.currentListId = normalizedId;
+        // Keep ID as-is - can be string (offline) or number (online)
+        // Use string comparison to handle both cases
+        if (String(listId) === String(this.currentListId)) return;
+        this.currentListId = listId;
         this.updateTitle();
         if (!this.isOnline) this.saveToLocalStorage();
         this.renderTabs();
@@ -572,7 +572,8 @@ class TaskManager {
     }
     
     updateTitle() {
-        const list = this.lists.find(l => l.id === this.currentListId);
+        // Handle both string and number IDs
+        const list = this.lists.find(l => String(l.id) === String(this.currentListId));
         if (list) {
             this.documentTitle.textContent = list.name;
             document.title = list.name;
@@ -590,7 +591,7 @@ class TaskManager {
     
     renderTabs() {
         const html = this.lists.map(list => `
-            <button class="list-tab ${list.id === this.currentListId ? 'active' : ''}" data-list-id="${list.id}">
+            <button class="list-tab ${String(list.id) === String(this.currentListId) ? 'active' : ''}" data-list-id="${list.id}">
                 <span class="list-tab-name">${this.escapeHTML(list.name)}</span>
                 <svg class="edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-edit="${list.id}">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -634,10 +635,8 @@ class TaskManager {
             this.tasks = [];
         }
         const filtered = this.tasks.filter(t => {
-            // Normalize both to numbers for comparison
-            const taskListId = Number(t.list_id);
-            const currentListIdNum = Number(this.currentListId);
-            return taskListId === currentListIdNum || t.list_id == this.currentListId;
+            // Use string comparison to handle both string and number IDs
+            return String(t.list_id) === String(this.currentListId);
         });
         return filtered;
     }
@@ -724,10 +723,10 @@ class TaskManager {
             const updated = await res.json();
             // Normalize completed field
             updated.completed = !!updated.completed;
-            const idx = this.tasks.findIndex(t => t.id === id);
+            const idx = this.tasks.findIndex(t => String(t.id) === String(id));
             if (idx !== -1) this.tasks[idx] = updated;
         } else {
-            const task = this.tasks.find(t => t.id === id);
+            const task = this.tasks.find(t => String(t.id) === String(id));
             if (task) {
                 Object.assign(task, updates);
                 if (updates.completed && !task.completed_at) {
@@ -747,14 +746,15 @@ class TaskManager {
                 headers: this.getAuthHeaders()
             });
         }
-        this.tasks = this.tasks.filter(t => t.id !== id);
+        this.tasks = this.tasks.filter(t => String(t.id) !== String(id));
         if (!this.isOnline) this.saveToLocalStorage();
     }
     
     async toggleTask(id) {
-        const task = this.tasks.find(t => t.id === id);
+        // Handle both string and number IDs
+        const task = this.tasks.find(t => String(t.id) === String(id));
         if (task) {
-            await this.updateTask(id, { completed: !task.completed });
+            await this.updateTask(task.id, { completed: !task.completed });
             this.render();
         }
     }
@@ -762,7 +762,8 @@ class TaskManager {
     // ============ TASK MODAL ============
     
     openTaskModal(taskId) {
-        const task = this.tasks.find(t => t.id === taskId);
+        // Handle both string and number IDs
+        const task = this.tasks.find(t => String(t.id) === String(taskId));
         if (!task) return;
         
         this.currentTaskId = taskId;
