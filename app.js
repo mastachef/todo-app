@@ -1094,43 +1094,87 @@ class TaskManager {
     // ============ CLIENT-SIDE REMINDER CHECKER ============
     
     startReminderChecker() {
-        // Check reminders every 30 seconds when app is open
-        this.reminderCheckInterval = setInterval(() => this.checkLocalReminders(), 30000);
+        console.log('[Reminders] Starting reminder checker...');
         
-        // Also check when page becomes visible
+        // Check reminders every 10 seconds when app is open
+        this.reminderCheckInterval = setInterval(() => this.checkLocalReminders(), 10000);
+        
+        // Also check when page becomes visible (user switches back to tab)
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
+                console.log('[Reminders] Page visible, checking reminders...');
                 this.checkLocalReminders();
             }
         });
         
-        // Initial check
-        setTimeout(() => this.checkLocalReminders(), 2000);
+        // Check on window focus
+        window.addEventListener('focus', () => {
+            console.log('[Reminders] Window focused, checking reminders...');
+            this.checkLocalReminders();
+        });
+        
+        // Initial check after tasks are loaded (give it time)
+        setTimeout(() => {
+            console.log('[Reminders] Initial check...');
+            this.checkLocalReminders();
+        }, 3000);
     }
     
     async checkLocalReminders() {
-        if (!Array.isArray(this.tasks) || this.tasks.length === 0) return;
-        if (Notification.permission !== 'granted') return;
+        // Make sure we have tasks
+        if (!Array.isArray(this.tasks) || this.tasks.length === 0) {
+            console.log('[Reminders] No tasks to check');
+            return;
+        }
+        
+        // Check notification permission
+        if (!('Notification' in window)) {
+            console.log('[Reminders] Notifications not supported');
+            return;
+        }
+        
+        if (Notification.permission !== 'granted') {
+            console.log('[Reminders] Notification permission not granted:', Notification.permission);
+            return;
+        }
         
         const now = new Date();
         const notifiedKey = 'taskManager_notifiedReminders';
-        const notified = JSON.parse(localStorage.getItem(notifiedKey) || '{}');
+        let notified = {};
         
-        // Clean old entries (older than 24 hours)
-        const oneDayAgo = now.getTime() - 24 * 60 * 60 * 1000;
-        for (const key in notified) {
-            if (notified[key] < oneDayAgo) delete notified[key];
+        try {
+            notified = JSON.parse(localStorage.getItem(notifiedKey) || '{}');
+        } catch (e) {
+            notified = {};
         }
+        
+        // Clean old entries (older than 1 hour)
+        const oneHourAgo = now.getTime() - 60 * 60 * 1000;
+        for (const key in notified) {
+            if (notified[key] < oneHourAgo) delete notified[key];
+        }
+        
+        let tasksWithReminders = 0;
+        let dueReminders = 0;
         
         for (const task of this.tasks) {
             if (task.completed || !task.reminder_time) continue;
+            tasksWithReminders++;
             
             const reminderTime = new Date(task.reminder_time);
-            const taskKey = `${task.id}_${task.reminder_time}`;
+            const taskKey = `${task.id}_${reminderTime.getTime()}`;
             
-            // Check if reminder is due (within last 5 minutes) and not already notified
-            if (reminderTime <= now && reminderTime > new Date(now.getTime() - 5 * 60 * 1000)) {
-                if (!notified[taskKey]) {
+            // Check if reminder time has passed and not already notified
+            const isDue = reminderTime <= now;
+            const alreadyNotified = !!notified[taskKey];
+            
+            console.log(`[Reminders] Task "${task.text}": due=${isDue}, notified=${alreadyNotified}, time=${reminderTime.toLocaleString()}`);
+            
+            if (isDue && !alreadyNotified) {
+                dueReminders++;
+                console.log(`[Reminders] 🔔 Triggering notification for: ${task.text}`);
+                
+                try {
                     await this.showLocalNotification(task);
                     notified[taskKey] = now.getTime();
                     
@@ -1138,49 +1182,95 @@ class TaskManager {
                     if (task.reminder_repeat) {
                         await this.rescheduleReminder(task);
                     } else {
-                        // Clear one-time reminder
-                        await this.updateTask(task.id, { reminder_time: null });
+                        // Clear one-time reminder locally
+                        task.reminder_time = null;
+                        // Also update on server if online
+                        if (this.isOnline) {
+                            await this.updateTask(task.id, { reminder_time: null });
+                        }
                     }
+                } catch (e) {
+                    console.error('[Reminders] Failed to show notification:', e);
                 }
             }
         }
         
+        console.log(`[Reminders] Checked ${tasksWithReminders} tasks with reminders, ${dueReminders} due`);
         localStorage.setItem(notifiedKey, JSON.stringify(notified));
     }
     
     async showLocalNotification(task) {
-        console.log('Showing notification for task:', task.text);
+        console.log('[Reminders] Showing notification for task:', task.text);
         
-        // Try service worker notification first (works better on mobile)
-        if (this.swRegistration) {
+        const notificationOptions = {
+            body: task.text,
+            icon: '/icons/icon-192.svg',
+            badge: '/icons/icon-96.svg',
+            tag: `reminder-${task.id}`,
+            renotify: true,
+            vibrate: [200, 100, 200],
+            data: { taskId: task.id, url: '/' },
+            silent: false
+        };
+        
+        let notificationShown = false;
+        
+        // Try service worker notification first (works better on mobile and in background)
+        if (this.swRegistration && this.swRegistration.showNotification) {
             try {
                 await this.swRegistration.showNotification('⏰ Reminder', {
-                    body: task.text,
-                    icon: '/icons/icon-192.svg',
-                    badge: '/icons/icon-96.svg',
-                    tag: `reminder-${task.id}`,
-                    renotify: true,
-                    requireInteraction: true,
-                    vibrate: [200, 100, 200],
-                    data: { taskId: task.id, url: '/' }
+                    ...notificationOptions,
+                    requireInteraction: true
                 });
-                return;
+                console.log('[Reminders] SW notification shown');
+                notificationShown = true;
             } catch (e) {
-                console.log('SW notification failed, trying Notification API:', e);
+                console.log('[Reminders] SW notification failed:', e.message);
             }
         }
         
-        // Fallback to Notification API
+        // Fallback to Notification API if SW failed
+        if (!notificationShown && 'Notification' in window) {
+            try {
+                const notification = new Notification('⏰ Reminder', notificationOptions);
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+                console.log('[Reminders] Notification API notification shown');
+                notificationShown = true;
+            } catch (e) {
+                console.log('[Reminders] Notification API failed:', e.message);
+            }
+        }
+        
+        // Last resort: use alert (will work everywhere but is blocking)
+        if (!notificationShown) {
+            console.log('[Reminders] Using alert fallback');
+            // Don't use alert as it's too disruptive, just log
+        }
+        
+        // Also play a sound if possible
         try {
-            new Notification('⏰ Reminder', {
-                body: task.text,
-                icon: '/icons/icon-192.svg',
-                tag: `reminder-${task.id}`,
-                renotify: true,
-                requireInteraction: true
-            });
+            // Try to play a notification sound
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            gainNode.gain.value = 0.3;
+            
+            oscillator.start();
+            setTimeout(() => {
+                oscillator.stop();
+                audioContext.close();
+            }, 200);
         } catch (e) {
-            console.error('Notification failed:', e);
+            // Sound not available, that's ok
         }
     }
     
