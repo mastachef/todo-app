@@ -618,14 +618,31 @@ class TaskManager {
         };
         
         if (this.isOnline) {
-            const res = await fetch(`${this.API_BASE}/api/tasks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(task)
-            });
-            const created = await res.json();
-            this.tasks.unshift(created);
+            try {
+                const res = await fetch(`${this.API_BASE}/api/tasks`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(task)
+                });
+                
+                if (res.ok) {
+                    const created = await res.json();
+                    this.tasks.unshift(created);
+                } else {
+                    console.error('Failed to create task:', await res.text());
+                    // Fallback to local storage on error
+                    task.id = this.generateId();
+                    this.tasks.unshift(task);
+                    this.saveToLocalStorage();
+                }
+            } catch (e) {
+                console.error('Error creating task:', e);
+                // Fallback to local storage on network error
+                task.id = this.generateId();
+                this.tasks.unshift(task);
+                this.saveToLocalStorage();
+            }
         } else {
             task.id = this.generateId();
             this.tasks.unshift(task);
