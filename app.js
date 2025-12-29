@@ -85,6 +85,7 @@ class TaskManager {
         this.bindEvents();
         await this.registerServiceWorker();
         this.updateNotificationButtonState();
+        this.startReminderChecker();
     }
     
     // ============ AUTH TOKEN MANAGEMENT ============
@@ -1088,6 +1089,121 @@ class TaskManager {
             outputArray[i] = rawData.charCodeAt(i);
         }
         return outputArray;
+    }
+    
+    // ============ CLIENT-SIDE REMINDER CHECKER ============
+    
+    startReminderChecker() {
+        // Check reminders every 30 seconds when app is open
+        this.reminderCheckInterval = setInterval(() => this.checkLocalReminders(), 30000);
+        
+        // Also check when page becomes visible
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                this.checkLocalReminders();
+            }
+        });
+        
+        // Initial check
+        setTimeout(() => this.checkLocalReminders(), 2000);
+    }
+    
+    async checkLocalReminders() {
+        if (!Array.isArray(this.tasks) || this.tasks.length === 0) return;
+        if (Notification.permission !== 'granted') return;
+        
+        const now = new Date();
+        const notifiedKey = 'taskManager_notifiedReminders';
+        const notified = JSON.parse(localStorage.getItem(notifiedKey) || '{}');
+        
+        // Clean old entries (older than 24 hours)
+        const oneDayAgo = now.getTime() - 24 * 60 * 60 * 1000;
+        for (const key in notified) {
+            if (notified[key] < oneDayAgo) delete notified[key];
+        }
+        
+        for (const task of this.tasks) {
+            if (task.completed || !task.reminder_time) continue;
+            
+            const reminderTime = new Date(task.reminder_time);
+            const taskKey = `${task.id}_${task.reminder_time}`;
+            
+            // Check if reminder is due (within last 5 minutes) and not already notified
+            if (reminderTime <= now && reminderTime > new Date(now.getTime() - 5 * 60 * 1000)) {
+                if (!notified[taskKey]) {
+                    await this.showLocalNotification(task);
+                    notified[taskKey] = now.getTime();
+                    
+                    // Handle repeat reminders
+                    if (task.reminder_repeat) {
+                        await this.rescheduleReminder(task);
+                    } else {
+                        // Clear one-time reminder
+                        await this.updateTask(task.id, { reminder_time: null });
+                    }
+                }
+            }
+        }
+        
+        localStorage.setItem(notifiedKey, JSON.stringify(notified));
+    }
+    
+    async showLocalNotification(task) {
+        console.log('Showing notification for task:', task.text);
+        
+        // Try service worker notification first (works better on mobile)
+        if (this.swRegistration) {
+            try {
+                await this.swRegistration.showNotification('⏰ Reminder', {
+                    body: task.text,
+                    icon: '/icons/icon-192.svg',
+                    badge: '/icons/icon-96.svg',
+                    tag: `reminder-${task.id}`,
+                    renotify: true,
+                    requireInteraction: true,
+                    vibrate: [200, 100, 200],
+                    data: { taskId: task.id, url: '/' }
+                });
+                return;
+            } catch (e) {
+                console.log('SW notification failed, trying Notification API:', e);
+            }
+        }
+        
+        // Fallback to Notification API
+        try {
+            new Notification('⏰ Reminder', {
+                body: task.text,
+                icon: '/icons/icon-192.svg',
+                tag: `reminder-${task.id}`,
+                renotify: true,
+                requireInteraction: true
+            });
+        } catch (e) {
+            console.error('Notification failed:', e);
+        }
+    }
+    
+    async rescheduleReminder(task) {
+        const reminderDate = new Date(task.reminder_time);
+        
+        switch (task.reminder_repeat) {
+            case 'hourly':
+                reminderDate.setHours(reminderDate.getHours() + 1);
+                break;
+            case 'daily':
+                reminderDate.setDate(reminderDate.getDate() + 1);
+                break;
+            case 'weekly':
+                reminderDate.setDate(reminderDate.getDate() + 7);
+                break;
+            case 'monthly':
+                reminderDate.setMonth(reminderDate.getMonth() + 1);
+                break;
+        }
+        
+        await this.updateTask(task.id, { reminder_time: reminderDate.toISOString() });
+        console.log(`Rescheduled reminder for task ${task.id} to ${reminderDate.toISOString()}`);
     }
     
     // ============ UTILITIES ============

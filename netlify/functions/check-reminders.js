@@ -33,8 +33,9 @@ export async function handler(event) {
 
     const now = new Date();
     
-    // Find tasks with reminders that are due (within last 5 minutes to account for timing)
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+    // Find tasks with reminders that are due
+    // Use a 10-minute window to catch any missed reminders
+    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
     
     const dueTasks = await db.queryAll(`
       SELECT t.*, t.user_id as uid
@@ -43,7 +44,10 @@ export async function handler(event) {
       AND t.reminder_time IS NOT NULL 
       AND t.reminder_time <= $1
       AND t.reminder_time > $2
-    `, [now.toISOString(), fiveMinutesAgo.toISOString()]);
+    `, [now.toISOString(), tenMinutesAgo.toISOString()]);
+    
+    console.log(`Current time: ${now.toISOString()}`);
+    console.log(`Checking for reminders between ${tenMinutesAgo.toISOString()} and ${now.toISOString()}`);
 
     console.log(`Found ${dueTasks.length} due reminders`);
 
