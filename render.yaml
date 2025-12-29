@@ -1,0 +1,20 @@
+# Render deployment configuration
+# Deploy at https://render.com
+
+services:
+  - type: web
+    name: todo-app
+    env: node
+    buildCommand: cd server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: BASE_URL
+        fromService:
+          name: todo-app
+          type: web
+          property: host
+

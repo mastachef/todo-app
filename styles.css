@@ -72,6 +72,338 @@
     --shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
+/* Auth Screens */
+.auth-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--bg-primary);
+}
+
+.auth-card {
+    background: var(--bg-document);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 400px;
+}
+
+.auth-title {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 2rem;
+    text-align: center;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.auth-subtitle {
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: 1.5rem;
+}
+
+.auth-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.auth-tab {
+    flex: 1;
+    padding: 0.75rem;
+    border: none;
+    background: var(--bg-hover);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.auth-tab.active {
+    background: var(--accent);
+    color: white;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.auth-form input {
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 1rem;
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+.auth-form input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.auth-btn {
+    padding: 0.85rem;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--accent);
+    color: white;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-decoration: none;
+}
+
+.auth-btn:hover {
+    background: var(--accent-hover);
+}
+
+.auth-btn-google {
+    background: var(--bg-document);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+}
+
+.auth-btn-google:hover {
+    background: var(--bg-hover);
+}
+
+.auth-divider {
+    display: flex;
+    align-items: center;
+    margin: 1.5rem 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+.auth-divider span {
+    padding: 0 1rem;
+}
+
+.auth-error {
+    color: #ef4444;
+    text-align: center;
+    font-size: 0.85rem;
+    margin-top: 1rem;
+    min-height: 1.2em;
+}
+
+.auth-success {
+    color: #22c55e;
+    text-align: center;
+    font-size: 0.85rem;
+    margin-top: 1rem;
+}
+
+.resend-verification {
+    text-align: center;
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-hover);
+    border-radius: var(--radius-md);
+}
+
+.resend-verification p {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.auth-link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.85rem;
+    text-decoration: underline;
+}
+
+.auth-link:hover {
+    color: var(--accent-hover);
+}
+
+.auth-skip {
+    display: block;
+    width: 100%;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: var(--transition);
+}
+
+.auth-skip:hover {
+    color: var(--text-primary);
+}
+
+/* Header Actions */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.icon-btn {
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.6rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.icon-btn:hover {
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+.icon-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* User Menu */
+.user-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    background: var(--bg-modal);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    min-width: 200px;
+    z-index: 100;
+    display: none;
+}
+
+.user-menu.open {
+    display: block;
+}
+
+.user-info {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.user-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    transition: var(--transition);
+}
+
+.user-menu-item:hover {
+    background: var(--bg-hover);
+}
+
+.user-menu-item svg {
+    width: 18px;
+    height: 18px;
+    color: var(--text-muted);
+}
+
+.header-top {
+    position: relative;
+}
+
+/* Reminder Inputs */
+.modal-reminder-section {
+    margin-bottom: 1.5rem;
+}
+
+.reminder-inputs {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.reminder-input,
+.reminder-select {
+    flex: 1;
+    padding: 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 0.9rem;
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+.reminder-input:focus,
+.reminder-select:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.clear-reminder-btn {
+    margin-top: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.clear-reminder-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* Task Reminder Indicator */
+.task-reminder {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--accent);
+    margin-top: 0.25rem;
+}
+
+.task-reminder svg {
+    width: 12px;
+    height: 12px;
+}
+
 /* Reset & Base */
 *, *::before, *::after {
     box-sizing: border-box;
