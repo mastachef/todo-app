@@ -10,13 +10,10 @@ class TaskManager {
         this.currentPriority = 'none';
         this.currentSort = 'newest';
         this.editingListId = null;
+        this.authToken = null;
         
-        // Use Render backend if on Netlify, otherwise use current origin
-        const isNetlify = window.location.hostname.includes('netlify.app') || 
-                         window.location.hostname.includes('netlify.com');
-        this.API_BASE = isNetlify 
-            ? 'https://todo-app-yyrd.onrender.com'  // Your Render backend URL
-            : window.location.origin;
+        // Use Netlify Functions
+        this.API_BASE = '/.netlify/functions';
         
         this.cacheDOM();
         this.init();
@@ -32,9 +29,6 @@ class TaskManager {
         this.authSuccess = document.getElementById('auth-success');
         this.authTabs = document.querySelectorAll('.auth-tab');
         this.authSkip = document.getElementById('auth-skip');
-        this.resendVerification = document.getElementById('resend-verification');
-        this.resendBtn = document.getElementById('resend-btn');
-        this.pendingEmail = null;
         
         // App elements
         this.newTaskInput = document.getElementById('new-task-input');
@@ -54,7 +48,6 @@ class TaskManager {
         this.userMenu = document.getElementById('user-menu');
         this.userInfo = document.getElementById('user-info');
         this.logoutBtn = document.getElementById('logout-btn');
-        this.enableNotifications = document.getElementById('enable-notifications');
         
         // Sort
         this.sortBtn = document.getElementById('sort-btn');
@@ -85,29 +78,47 @@ class TaskManager {
     
     async init() {
         this.loadTheme();
-        this.checkUrlParams();
+        this.loadAuthToken();
         await this.checkAuth();
         this.bindEvents();
         this.registerServiceWorker();
     }
     
-    checkUrlParams() {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('verified') === '1') {
-            this.authSuccess.textContent = 'Email verified! You can now sign in.';
-            window.history.replaceState({}, '', '/');
+    // ============ AUTH TOKEN MANAGEMENT ============
+    
+    loadAuthToken() {
+        this.authToken = localStorage.getItem('taskManager_authToken');
+    }
+    
+    saveAuthToken(token) {
+        this.authToken = token;
+        if (token) {
+            localStorage.setItem('taskManager_authToken', token);
+        } else {
+            localStorage.removeItem('taskManager_authToken');
         }
-        if (params.get('error') === 'invalid-token') {
-            this.authError.textContent = 'Invalid or expired verification link.';
-            window.history.replaceState({}, '', '/');
+    }
+    
+    getAuthHeaders() {
+        const headers = { 'Content-Type': 'application/json' };
+        if (this.authToken) {
+            headers['Authorization'] = `Bearer ${this.authToken}`;
         }
+        return headers;
     }
     
     // ============ AUTH ============
     
     async checkAuth() {
+        if (!this.authToken) {
+            this.showAuth();
+            return;
+        }
+        
         try {
-            const res = await fetch(`${this.API_BASE}/auth/me`, { credentials: 'include' });
+            const res = await fetch(`${this.API_BASE}/auth-me`, {
+                headers: this.getAuthHeaders()
+            });
             const data = await res.json();
             
             if (data.user) {
@@ -116,6 +127,8 @@ class TaskManager {
                 this.showApp();
                 await this.loadFromServer();
             } else {
+                // Token invalid or expired
+                this.saveAuthToken(null);
                 this.showAuth();
             }
         } catch (e) {
@@ -145,28 +158,23 @@ class TaskManager {
     async login(email, password) {
         this.authError.textContent = '';
         this.authSuccess.textContent = '';
-        this.resendVerification.style.display = 'none';
         
         try {
-            const res = await fetch(`${this.API_BASE}/auth/login`, {
+            const res = await fetch(`${this.API_BASE}/auth-login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ email, password })
             });
             const data = await res.json();
             
-            if (res.ok) {
+            if (res.ok && data.token) {
+                this.saveAuthToken(data.token);
                 this.user = data.user;
                 this.isOnline = true;
                 this.showApp();
                 await this.loadFromServer();
             } else {
                 this.authError.textContent = data.error || 'Login failed';
-                if (data.needsVerification) {
-                    this.pendingEmail = email;
-                    this.resendVerification.style.display = 'block';
-                }
             }
         } catch (e) {
             this.authError.textContent = 'Server unavailable';
@@ -178,31 +186,19 @@ class TaskManager {
         this.authSuccess.textContent = '';
         
         try {
-            const res = await fetch(`${this.API_BASE}/auth/register`, {
+            const res = await fetch(`${this.API_BASE}/auth-register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
                 body: JSON.stringify({ email, password, name })
             });
             const data = await res.json();
             
-            if (res.ok) {
-                if (data.user) {
-                    // Auto-verified (dev mode)
-                    this.user = data.user;
-                    this.isOnline = true;
-                    this.showApp();
-                    await this.loadFromServer();
-                } else {
-                    // Email verification required
-                    this.authSuccess.textContent = data.message;
-                    this.pendingEmail = email;
-                    this.resendVerification.style.display = 'block';
-                    // Switch to login tab
-                    this.authTabs.forEach(t => t.classList.toggle('active', t.dataset.tab === 'login'));
-                    this.loginForm.style.display = 'flex';
-                    this.registerForm.style.display = 'none';
-                }
+            if (res.ok && data.token) {
+                this.saveAuthToken(data.token);
+                this.user = data.user;
+                this.isOnline = true;
+                this.showApp();
+                await this.loadFromServer();
             } else {
                 this.authError.textContent = data.error || 'Registration failed';
             }
@@ -211,26 +207,14 @@ class TaskManager {
         }
     }
     
-    async resendVerificationEmail() {
-        if (!this.pendingEmail) return;
-        
-        try {
-            const res = await fetch(`${this.API_BASE}/auth/resend-verification`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: this.pendingEmail })
-            });
-            const data = await res.json();
-            this.authSuccess.textContent = 'Verification email sent!';
-        } catch (e) {
-            this.authError.textContent = 'Failed to send email';
-        }
-    }
-    
     async logout() {
         try {
-            await fetch(`${this.API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
+            await fetch(`${this.API_BASE}/auth-logout`, {
+                method: 'POST',
+                headers: this.getAuthHeaders()
+            });
         } catch (e) {}
+        this.saveAuthToken(null);
         this.user = null;
         this.isOnline = false;
         this.lists = [];
@@ -249,14 +233,15 @@ class TaskManager {
     async loadFromServer() {
         try {
             const [listsRes, tasksRes] = await Promise.all([
-                fetch(`${this.API_BASE}/api/lists`, { credentials: 'include' }),
-                fetch(`${this.API_BASE}/api/tasks`, { credentials: 'include' })
+                fetch(`${this.API_BASE}/api-lists`, { headers: this.getAuthHeaders() }),
+                fetch(`${this.API_BASE}/api-tasks`, { headers: this.getAuthHeaders() })
             ]);
             
             if (!listsRes.ok || !tasksRes.ok) {
-                // If 401, user session expired
+                // If 401, token expired
                 if (listsRes.status === 401 || tasksRes.status === 401) {
-                    console.log('Session expired, switching to offline mode');
+                    console.log('Token expired, switching to offline mode');
+                    this.saveAuthToken(null);
                     this.isOnline = false;
                     this.user = null;
                     this.loadFromLocalStorage();
@@ -271,19 +256,9 @@ class TaskManager {
             
             // Ensure they are arrays before assigning
             this.lists = Array.isArray(listsData) ? listsData : [];
-            // Double check tasksData is actually an array
-            if (!Array.isArray(tasksData)) {
-                console.error('tasksData is not an array! Type:', typeof tasksData, 'Value:', tasksData);
-                this.tasks = [];
-            } else {
-                this.tasks = tasksData;
-            }
+            this.tasks = Array.isArray(tasksData) ? tasksData : [];
             
-            // Ensure it's still an array before mapping
-            this.ensureTasksArray();
-            
-            // Normalize completed field from integer (0/1) to boolean
-            // Also normalize list_id to number for consistent comparison
+            // Normalize completed field and list_id
             this.tasks = this.tasks.map(t => ({
                 ...t,
                 completed: !!t.completed,
@@ -313,8 +288,7 @@ class TaskManager {
             console.error('Failed to load from server:', e);
             // Fallback to offline mode
             this.isOnline = false;
-            // Ensure tasks is an array before loading from localStorage
-            this.ensureTasksArray();
+            if (!Array.isArray(this.tasks)) this.tasks = [];
             this.loadFromLocalStorage();
             this.showApp();
         }
@@ -399,7 +373,6 @@ class TaskManager {
         
         this.authSkip.addEventListener('click', () => this.skipAuth());
         this.logoutBtn.addEventListener('click', () => this.logout());
-        this.resendBtn.addEventListener('click', () => this.resendVerificationEmail());
         
         // Theme
         this.themeToggle.addEventListener('click', () => this.toggleTheme());
@@ -414,9 +387,6 @@ class TaskManager {
             this.userMenu.classList.remove('open');
             this.sortMenu.classList.remove('open');
         });
-        
-        // Notifications
-        this.enableNotifications.addEventListener('click', () => this.requestNotificationPermission());
         
         // Sort
         this.sortBtn.addEventListener('click', (e) => {
@@ -493,10 +463,9 @@ class TaskManager {
     
     async createList(name) {
         if (this.isOnline) {
-            const res = await fetch(`${this.API_BASE}/api/lists`, {
+            const res = await fetch(`${this.API_BASE}/api-lists`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
+                headers: this.getAuthHeaders(),
                 body: JSON.stringify({ name })
             });
             const list = await res.json();
@@ -514,10 +483,9 @@ class TaskManager {
     
     async updateList(id, name) {
         if (this.isOnline) {
-            await fetch(`${this.API_BASE}/api/lists/${id}`, {
+            await fetch(`${this.API_BASE}/api-lists-id/${id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
+                headers: this.getAuthHeaders(),
                 body: JSON.stringify({ name })
             });
         }
@@ -528,9 +496,9 @@ class TaskManager {
     
     async deleteList(id) {
         if (this.isOnline) {
-            await fetch(`${this.API_BASE}/api/lists/${id}`, {
+            await fetch(`${this.API_BASE}/api-lists-id/${id}`, {
                 method: 'DELETE',
-                credentials: 'include'
+                headers: this.getAuthHeaders()
             });
         }
         this.lists = this.lists.filter(l => l.id !== id);
@@ -660,31 +628,16 @@ class TaskManager {
     
     // ============ TASKS ============
     
-    ensureTasksArray() {
+    getListTasks() {
         if (!Array.isArray(this.tasks)) {
-            console.error('this.tasks was not an array! Type:', typeof this.tasks, 'Value:', this.tasks);
+            console.warn('this.tasks is not an array in getListTasks, resetting...');
             this.tasks = [];
         }
-        return this.tasks;
-    }
-    
-    getListTasks() {
-        this.ensureTasksArray();
         const filtered = this.tasks.filter(t => {
             // Normalize both to numbers for comparison
             const taskListId = Number(t.list_id);
             const currentListIdNum = Number(this.currentListId);
-            const matches = taskListId === currentListIdNum || t.list_id == this.currentListId;
-            if (!matches && t.list_id !== undefined) {
-                console.log('Task filtered out:', { 
-                    taskId: t.id, 
-                    taskListId: t.list_id, 
-                    taskListIdType: typeof t.list_id,
-                    currentListId: this.currentListId,
-                    currentListIdType: typeof this.currentListId
-                });
-            }
-            return matches;
+            return taskListId === currentListIdNum || t.list_id == this.currentListId;
         });
         return filtered;
     }
@@ -695,79 +648,64 @@ class TaskManager {
             text,
             notes: '',
             priority: 'none',
-            completed: 0,
+            completed: false,
             created_at: new Date().toISOString(),
             completed_at: null,
             reminder_time: null,
             reminder_repeat: null
         };
         
-        // Ensure tasks is an array - check right before use
-        this.ensureTasksArray();
+        // Ensure tasks is an array
+        if (!Array.isArray(this.tasks)) {
+            this.tasks = [];
+        }
         
         if (this.isOnline) {
             try {
-                const res = await fetch(`${this.API_BASE}/api/tasks`, {
+                const res = await fetch(`${this.API_BASE}/api-tasks`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
+                    headers: this.getAuthHeaders(),
                     body: JSON.stringify(task)
                 });
                 
                 if (res.ok) {
                     const created = await res.json();
-                    // Normalize completed field from integer (0/1) to boolean
+                    // Normalize completed field and list_id
                     created.completed = !!created.completed;
-                    // Normalize list_id to match currentListId type
                     if (created.list_id !== undefined) {
                         created.list_id = Number(created.list_id);
                     }
-                    // CRITICAL: Ensure tasks is an array right before use
-                    this.ensureTasksArray();
-                    // Double check after potential async operations
-                    if (typeof this.tasks.unshift !== 'function') {
-                        console.error('this.tasks.unshift is not a function! this.tasks:', this.tasks);
-                        this.tasks = [];
-                    }
+                    if (!Array.isArray(this.tasks)) this.tasks = [];
                     this.tasks.unshift(created);
-                    console.log('Task added:', created);
-                    console.log('Current List ID:', this.currentListId, typeof this.currentListId);
-                    console.log('Task List ID:', created.list_id, typeof created.list_id);
-                    console.log('All tasks after add:', this.tasks.length);
                 } else {
-                    const errorText = await res.text();
-                    console.error('Failed to create task:', res.status, errorText);
+                    const errorData = await res.json().catch(() => ({}));
+                    console.error('Failed to create task:', res.status, errorData);
                     
-                    // If 401, user is not authenticated - switch to offline mode
+                    // If 401, token expired
                     if (res.status === 401) {
-                        console.log('Session expired, switching to offline mode');
+                        this.saveAuthToken(null);
                         this.isOnline = false;
                         this.user = null;
-                        // Load from localStorage if available
                         this.loadFromLocalStorage();
                     }
                     
-                    // Fallback to local storage on error
-                    this.ensureTasksArray();
+                    // Fallback to local storage
+                    if (!Array.isArray(this.tasks)) this.tasks = [];
                     task.id = this.generateId();
-                    task.completed = false; // Ensure boolean
                     this.tasks.unshift(task);
                     this.saveToLocalStorage();
                 }
             } catch (e) {
                 console.error('Error creating task:', e);
-                // Fallback to local storage on network error
                 this.isOnline = false;
-                this.ensureTasksArray();
+                if (!Array.isArray(this.tasks)) this.tasks = [];
                 task.id = this.generateId();
-                task.completed = false; // Ensure boolean
                 this.tasks.unshift(task);
                 this.saveToLocalStorage();
             }
         } else {
-            this.ensureTasksArray();
+            if (!Array.isArray(this.tasks)) this.tasks = [];
             task.id = this.generateId();
-            task.completed = false; // Ensure boolean
             this.tasks.unshift(task);
             this.saveToLocalStorage();
         }
@@ -778,14 +716,13 @@ class TaskManager {
     
     async updateTask(id, updates) {
         if (this.isOnline) {
-            const res = await fetch(`${this.API_BASE}/api/tasks/${id}`, {
+            const res = await fetch(`${this.API_BASE}/api-tasks-id/${id}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
+                headers: this.getAuthHeaders(),
                 body: JSON.stringify(updates)
             });
             const updated = await res.json();
-            // Normalize completed field from integer (0/1) to boolean
+            // Normalize completed field
             updated.completed = !!updated.completed;
             const idx = this.tasks.findIndex(t => t.id === id);
             if (idx !== -1) this.tasks[idx] = updated;
@@ -805,9 +742,9 @@ class TaskManager {
     
     async deleteTask(id) {
         if (this.isOnline) {
-            await fetch(`${this.API_BASE}/api/tasks/${id}`, {
+            await fetch(`${this.API_BASE}/api-tasks-id/${id}`, {
                 method: 'DELETE',
-                credentials: 'include'
+                headers: this.getAuthHeaders()
             });
         }
         this.tasks = this.tasks.filter(t => t.id !== id);
@@ -937,14 +874,6 @@ class TaskManager {
         let activeTasks = listTasks.filter(t => !t.completed);
         let completedTasks = listTasks.filter(t => t.completed);
         
-        console.log('Render - Current List ID:', this.currentListId, typeof this.currentListId);
-        console.log('Render - All tasks:', this.tasks.length);
-        console.log('Render - List tasks:', listTasks.length);
-        console.log('Render - Active tasks:', activeTasks.length);
-        if (this.tasks.length > 0) {
-            console.log('Sample task list_ids:', this.tasks.slice(0, 3).map(t => ({ id: t.id, list_id: t.list_id, type: typeof t.list_id })));
-        }
-        
         activeTasks = this.sortTasks(activeTasks);
         completedTasks.sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
         
@@ -1006,7 +935,7 @@ class TaskManager {
         });
     }
     
-    // ============ NOTIFICATIONS ============
+    // ============ SERVICE WORKER ============
     
     async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
@@ -1016,48 +945,6 @@ class TaskManager {
                 console.log('SW registration failed');
             }
         }
-    }
-    
-    async requestNotificationPermission() {
-        if (!('Notification' in window)) {
-            alert('This browser does not support notifications');
-            return;
-        }
-        
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-            await this.subscribeToPush();
-            alert('Notifications enabled!');
-        }
-    }
-    
-    async subscribeToPush() {
-        try {
-            const reg = await navigator.serviceWorker.ready;
-            const keyRes = await fetch(`${this.API_BASE}/api/push/vapid-public-key`);
-            const { key } = await keyRes.json();
-            
-            const subscription = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: this.urlBase64ToUint8Array(key)
-            });
-            
-            await fetch(`${this.API_BASE}/api/push/subscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ subscription })
-            });
-        } catch (e) {
-            console.error('Push subscription failed:', e);
-        }
-    }
-    
-    urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-        const rawData = window.atob(base64);
-        return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
     }
     
     // ============ UTILITIES ============

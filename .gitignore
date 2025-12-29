@@ -1,15 +1,13 @@
 # Dependencies
 node_modules/
-server/node_modules/
 
 # Environment variables
 .env
-server/.env
+.env.local
+.env.*.local
 
-# Database
-*.db
-server/*.db
-server/todo.db
+# Netlify
+.netlify/
 
 # Logs
 *.log
