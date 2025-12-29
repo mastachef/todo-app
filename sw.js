@@ -1,5 +1,5 @@
-// Service Worker for Push Notifications
-const CACHE_NAME = 'todo-app-v1';
+// Service Worker for Offline Support
+const CACHE_NAME = 'todo-app-v2';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -16,7 +16,7 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Activate event
+// Activate event - clear old caches
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -29,11 +29,27 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch event (offline support)
+// Fetch event - network first, fallback to cache
 self.addEventListener('fetch', event => {
+  // Skip non-GET requests and API calls
+  if (event.request.method !== 'GET' || event.request.url.includes('/.netlify/functions/')) {
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request)
-      .then(response => response || fetch(event.request))
+    fetch(event.request)
+      .then(response => {
+        // Clone the response and cache it
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, responseClone);
+        });
+        return response;
+      })
+      .catch(() => {
+        // If network fails, try cache
+        return caches.match(event.request);
+      })
   );
 });
 
