@@ -1096,8 +1096,14 @@ class TaskManager {
     startReminderChecker() {
         console.log('[Reminders] Starting reminder checker...');
         
+        // Track last check time for throttling
+        this.lastReminderCheck = 0;
+        
         // Check reminders every 10 seconds when app is open
-        this.reminderCheckInterval = setInterval(() => this.checkLocalReminders(), 10000);
+        this.reminderCheckInterval = setInterval(() => {
+            console.log('[Reminders] Interval triggered');
+            this.checkLocalReminders();
+        }, 10000);
         
         // Also check when page becomes visible (user switches back to tab)
         document.addEventListener('visibilitychange', () => {
@@ -1113,14 +1119,38 @@ class TaskManager {
             this.checkLocalReminders();
         });
         
-        // Initial check after tasks are loaded (give it time)
+        // Check on ANY user interaction (click, key, touch, scroll)
+        const interactionHandler = () => {
+            // Throttle: only check if more than 5 seconds since last check
+            const now = Date.now();
+            if (now - this.lastReminderCheck > 5000) {
+                console.log('[Reminders] User interaction, checking reminders...');
+                this.checkLocalReminders();
+            }
+        };
+        
+        document.addEventListener('click', interactionHandler);
+        document.addEventListener('keydown', interactionHandler);
+        document.addEventListener('touchstart', interactionHandler);
+        document.addEventListener('scroll', interactionHandler, { passive: true });
+        
+        // Initial check after tasks are loaded
         setTimeout(() => {
             console.log('[Reminders] Initial check...');
             this.checkLocalReminders();
         }, 3000);
+        
+        // Secondary check in case first one was too early
+        setTimeout(() => {
+            console.log('[Reminders] Secondary check...');
+            this.checkLocalReminders();
+        }, 10000);
     }
     
     async checkLocalReminders() {
+        // Update last check timestamp
+        this.lastReminderCheck = Date.now();
+        
         // Make sure we have tasks
         if (!Array.isArray(this.tasks) || this.tasks.length === 0) {
             console.log('[Reminders] No tasks to check');
@@ -1139,6 +1169,7 @@ class TaskManager {
         }
         
         const now = new Date();
+        console.log(`[Reminders] Checking at ${now.toLocaleTimeString()}`);
         const notifiedKey = 'taskManager_notifiedReminders';
         let notified = {};
         
