@@ -271,7 +271,13 @@ class TaskManager {
             
             // Ensure they are arrays before assigning
             this.lists = Array.isArray(listsData) ? listsData : [];
-            this.tasks = Array.isArray(tasksData) ? tasksData : [];
+            // Double check tasksData is actually an array
+            if (!Array.isArray(tasksData)) {
+                console.error('tasksData is not an array! Type:', typeof tasksData, 'Value:', tasksData);
+                this.tasks = [];
+            } else {
+                this.tasks = tasksData;
+            }
             
             // Normalize completed field from integer (0/1) to boolean
             // Also normalize list_id to number for consistent comparison
@@ -711,8 +717,16 @@ class TaskManager {
                     if (created.list_id !== undefined) {
                         created.list_id = Number(created.list_id);
                     }
-                    // Ensure tasks is still an array before adding
-                    if (!Array.isArray(this.tasks)) this.tasks = [];
+                    // CRITICAL: Ensure tasks is an array right before use
+                    if (!Array.isArray(this.tasks)) {
+                        console.error('this.tasks is not an array before unshift! Type:', typeof this.tasks, 'Value:', this.tasks);
+                        this.tasks = [];
+                    }
+                    // Double check after potential async operations
+                    if (typeof this.tasks.unshift !== 'function') {
+                        console.error('this.tasks.unshift is not a function! this.tasks:', this.tasks);
+                        this.tasks = [];
+                    }
                     this.tasks.unshift(created);
                     console.log('Task added:', created);
                     console.log('Current List ID:', this.currentListId, typeof this.currentListId);
