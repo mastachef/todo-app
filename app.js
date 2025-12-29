@@ -274,16 +274,29 @@ class TaskManager {
             this.tasks = Array.isArray(tasksData) ? tasksData : [];
             
             // Normalize completed field from integer (0/1) to boolean
+            // Also normalize list_id to number for consistent comparison
             this.tasks = this.tasks.map(t => ({
                 ...t,
-                completed: !!t.completed
+                completed: !!t.completed,
+                list_id: Number(t.list_id)
             }));
+            
+            // Normalize list IDs as well
+            this.lists = this.lists.map(l => ({
+                ...l,
+                id: Number(l.id)
+            }));
+            
+            // Normalize currentListId
+            if (this.currentListId !== null) {
+                this.currentListId = Number(this.currentListId);
+            }
             
             if (this.lists.length === 0) {
                 await this.createList('My Tasks');
             }
             
-            this.currentListId = this.lists[0]?.id;
+            this.currentListId = Number(this.lists[0]?.id);
             this.updateTitle();
             this.renderTabs();
             this.render();
@@ -315,7 +328,7 @@ class TaskManager {
         }
         
         if (!this.lists.find(l => l.id === this.currentListId)) {
-            this.currentListId = this.lists[0].id;
+            this.currentListId = Number(this.lists[0].id);
         }
         
         this.updateTitle();
@@ -478,6 +491,8 @@ class TaskManager {
                 body: JSON.stringify({ name })
             });
             const list = await res.json();
+            // Normalize list ID to number
+            list.id = Number(list.id);
             this.lists.push(list);
             return list;
         } else {
@@ -559,7 +574,7 @@ class TaskManager {
         await this.deleteList(this.editingListId);
         
         if (this.currentListId === this.editingListId) {
-            this.currentListId = this.lists[0].id;
+            this.currentListId = Number(this.lists[0].id);
             this.updateTitle();
         }
         
@@ -569,8 +584,10 @@ class TaskManager {
     }
     
     switchList(listId) {
-        if (listId === this.currentListId) return;
-        this.currentListId = listId;
+        // Normalize listId to number for consistent comparison
+        const normalizedId = Number(listId);
+        if (normalizedId === Number(this.currentListId)) return;
+        this.currentListId = normalizedId;
         this.updateTitle();
         if (!this.isOnline) this.saveToLocalStorage();
         this.renderTabs();
@@ -640,7 +657,19 @@ class TaskManager {
             this.tasks = [];
         }
         const filtered = this.tasks.filter(t => {
-            const matches = t.list_id === this.currentListId || t.list_id == this.currentListId;
+            // Normalize both to numbers for comparison
+            const taskListId = Number(t.list_id);
+            const currentListIdNum = Number(this.currentListId);
+            const matches = taskListId === currentListIdNum || t.list_id == this.currentListId;
+            if (!matches && t.list_id !== undefined) {
+                console.log('Task filtered out:', { 
+                    taskId: t.id, 
+                    taskListId: t.list_id, 
+                    taskListIdType: typeof t.list_id,
+                    currentListId: this.currentListId,
+                    currentListIdType: typeof this.currentListId
+                });
+            }
             return matches;
         });
         return filtered;
@@ -678,10 +707,17 @@ class TaskManager {
                     const created = await res.json();
                     // Normalize completed field from integer (0/1) to boolean
                     created.completed = !!created.completed;
+                    // Normalize list_id to match currentListId type
+                    if (created.list_id !== undefined) {
+                        created.list_id = Number(created.list_id);
+                    }
                     // Ensure tasks is still an array before adding
                     if (!Array.isArray(this.tasks)) this.tasks = [];
                     this.tasks.unshift(created);
                     console.log('Task added:', created);
+                    console.log('Current List ID:', this.currentListId, typeof this.currentListId);
+                    console.log('Task List ID:', created.list_id, typeof created.list_id);
+                    console.log('All tasks after add:', this.tasks.length);
                 } else {
                     const errorText = await res.text();
                     console.error('Failed to create task:', res.status, errorText);
@@ -885,10 +921,13 @@ class TaskManager {
         let activeTasks = listTasks.filter(t => !t.completed);
         let completedTasks = listTasks.filter(t => t.completed);
         
-        console.log('Render - Current List ID:', this.currentListId);
+        console.log('Render - Current List ID:', this.currentListId, typeof this.currentListId);
         console.log('Render - All tasks:', this.tasks.length);
         console.log('Render - List tasks:', listTasks.length);
         console.log('Render - Active tasks:', activeTasks.length);
+        if (this.tasks.length > 0) {
+            console.log('Sample task list_ids:', this.tasks.slice(0, 3).map(t => ({ id: t.id, list_id: t.list_id, type: typeof t.list_id })));
+        }
         
         activeTasks = this.sortTasks(activeTasks);
         completedTasks.sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
