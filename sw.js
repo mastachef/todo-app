@@ -1,10 +1,13 @@
-// Service Worker for Offline Support
-const CACHE_NAME = 'todo-app-v2';
+// Service Worker for Offline Support and Push Notifications
+const CACHE_NAME = 'todo-app-v3';
 const urlsToCache = [
   '/',
   '/index.html',
   '/styles.css',
-  '/app.js'
+  '/app.js',
+  '/manifest.json',
+  '/icons/icon-192.svg',
+  '/icons/icon-512.svg'
 ];
 
 // Install event
@@ -55,16 +58,26 @@ self.addEventListener('fetch', event => {
 
 // Push notification event
 self.addEventListener('push', event => {
-  const data = event.data ? event.data.json() : {};
-  const title = data.title || 'Task Reminder';
+  console.log('[SW] Push received:', event);
+  
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { body: event.data ? event.data.text() : 'You have a task reminder' };
+  }
+  
+  const title = data.title || '⏰ Task Reminder';
   const options = {
     body: data.body || 'You have a task reminder',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: '/icons/icon-192.svg',
+    badge: '/icons/icon-96.svg',
     vibrate: [200, 100, 200],
     data: data.data || {},
+    tag: data.data?.taskId ? `task-${data.data.taskId}` : 'reminder',
+    renotify: true,
     actions: [
-      { action: 'open', title: 'Open' },
+      { action: 'open', title: 'Open App' },
       { action: 'dismiss', title: 'Dismiss' }
     ],
     requireInteraction: true
@@ -77,9 +90,12 @@ self.addEventListener('push', event => {
 
 // Notification click event
 self.addEventListener('notificationclick', event => {
+  console.log('[SW] Notification clicked:', event.action);
   event.notification.close();
 
   if (event.action === 'dismiss') return;
+
+  const urlToOpen = event.notification.data?.url || '/';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
@@ -90,8 +106,12 @@ self.addEventListener('notificationclick', event => {
             return client.focus();
           }
         }
-        return clients.openWindow('/');
+        return clients.openWindow(urlToOpen);
       })
   );
 });
 
+// Handle notification close
+self.addEventListener('notificationclose', event => {
+  console.log('[SW] Notification closed');
+});

@@ -48,6 +48,8 @@ class TaskManager {
         this.userMenu = document.getElementById('user-menu');
         this.userInfo = document.getElementById('user-info');
         this.logoutBtn = document.getElementById('logout-btn');
+        this.enableNotificationsBtn = document.getElementById('enable-notifications');
+        this.notificationsBtnText = document.getElementById('notifications-btn-text');
         
         // Sort
         this.sortBtn = document.getElementById('sort-btn');
@@ -81,7 +83,8 @@ class TaskManager {
         this.loadAuthToken();
         await this.checkAuth();
         this.bindEvents();
-        this.registerServiceWorker();
+        await this.registerServiceWorker();
+        this.updateNotificationButtonState();
     }
     
     // ============ AUTH TOKEN MANAGEMENT ============
@@ -373,6 +376,11 @@ class TaskManager {
         
         this.authSkip.addEventListener('click', () => this.skipAuth());
         this.logoutBtn.addEventListener('click', () => this.logout());
+        
+        // Notifications
+        if (this.enableNotificationsBtn) {
+            this.enableNotificationsBtn.addEventListener('click', () => this.requestNotificationPermission());
+        }
         
         // Theme
         this.themeToggle.addEventListener('click', () => this.toggleTheme());
@@ -936,16 +944,144 @@ class TaskManager {
         });
     }
     
-    // ============ SERVICE WORKER ============
+    // ============ SERVICE WORKER & PUSH NOTIFICATIONS ============
     
     async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
             try {
-                await navigator.serviceWorker.register('/sw.js');
+                this.swRegistration = await navigator.serviceWorker.register('/sw.js');
+                console.log('Service Worker registered');
             } catch (e) {
-                console.log('SW registration failed');
+                console.log('SW registration failed:', e);
             }
         }
+    }
+    
+    updateNotificationButtonState() {
+        if (!this.enableNotificationsBtn) return;
+        
+        if (!('Notification' in window) || !('PushManager' in window)) {
+            this.notificationsBtnText.textContent = 'Notifications not supported';
+            this.enableNotificationsBtn.disabled = true;
+            this.enableNotificationsBtn.style.opacity = '0.5';
+            return;
+        }
+        
+        if (Notification.permission === 'granted') {
+            this.notificationsBtnText.textContent = 'Notifications Enabled ✓';
+            this.enableNotificationsBtn.style.opacity = '0.7';
+        } else if (Notification.permission === 'denied') {
+            this.notificationsBtnText.textContent = 'Notifications Blocked';
+            this.enableNotificationsBtn.style.opacity = '0.5';
+        } else {
+            this.notificationsBtnText.textContent = 'Enable Notifications';
+        }
+    }
+    
+    async requestNotificationPermission() {
+        if (!('Notification' in window)) {
+            alert('This browser does not support notifications');
+            return;
+        }
+        
+        if (!('PushManager' in window)) {
+            alert('Push notifications are not supported in this browser');
+            return;
+        }
+        
+        // Check if running as PWA on iOS
+        const isIOSPWA = window.navigator.standalone === true;
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        
+        if (isIOS && !isIOSPWA) {
+            alert('For notifications on iOS, please add this app to your Home Screen first:\n\n1. Tap the Share button\n2. Select "Add to Home Screen"\n3. Then enable notifications from the app');
+            return;
+        }
+        
+        try {
+            const permission = await Notification.requestPermission();
+            console.log('Notification permission:', permission);
+            
+            if (permission === 'granted') {
+                await this.subscribeToPush();
+                this.updateNotificationButtonState();
+                
+                // Show test notification
+                if (this.swRegistration) {
+                    this.swRegistration.showNotification('Notifications Enabled! 🎉', {
+                        body: 'You will now receive reminders for your tasks.',
+                        icon: '/icons/icon-192.svg',
+                        badge: '/icons/icon-96.svg'
+                    });
+                }
+            } else if (permission === 'denied') {
+                alert('Notifications were blocked. You can enable them in your browser settings.');
+            }
+            
+            this.updateNotificationButtonState();
+        } catch (e) {
+            console.error('Error requesting notification permission:', e);
+            alert('Failed to enable notifications. Please try again.');
+        }
+    }
+    
+    async subscribeToPush() {
+        if (!this.swRegistration || !this.isOnline) {
+            console.log('Cannot subscribe: no SW registration or offline');
+            return;
+        }
+        
+        try {
+            // Get VAPID public key from server
+            const vapidRes = await fetch(`${this.API_BASE}/api-push-vapid`);
+            const vapidData = await vapidRes.json();
+            
+            if (!vapidData.key) {
+                console.error('No VAPID key from server');
+                return;
+            }
+            
+            // Convert VAPID key to Uint8Array
+            const applicationServerKey = this.urlBase64ToUint8Array(vapidData.key);
+            
+            // Subscribe to push
+            const subscription = await this.swRegistration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey
+            });
+            
+            console.log('Push subscription:', JSON.stringify(subscription));
+            
+            // Send subscription to server
+            const res = await fetch(`${this.API_BASE}/api-push-subscribe`, {
+                method: 'POST',
+                headers: this.getAuthHeaders(),
+                body: JSON.stringify({ subscription: subscription.toJSON() })
+            });
+            
+            if (res.ok) {
+                console.log('Push subscription saved to server');
+            } else {
+                console.error('Failed to save push subscription');
+            }
+        } catch (e) {
+            console.error('Push subscription error:', e);
+        }
+    }
+    
+    urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+            .replace(/\-/g, '+')
+            .replace(/_/g, '/');
+        
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
     }
     
     // ============ UTILITIES ============
