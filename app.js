@@ -279,6 +279,9 @@ class TaskManager {
                 this.tasks = tasksData;
             }
             
+            // Ensure it's still an array before mapping
+            this.ensureTasksArray();
+            
             // Normalize completed field from integer (0/1) to boolean
             // Also normalize list_id to number for consistent comparison
             this.tasks = this.tasks.map(t => ({
@@ -311,7 +314,7 @@ class TaskManager {
             // Fallback to offline mode
             this.isOnline = false;
             // Ensure tasks is an array before loading from localStorage
-            if (!Array.isArray(this.tasks)) this.tasks = [];
+            this.ensureTasksArray();
             this.loadFromLocalStorage();
             this.showApp();
         }
@@ -657,11 +660,16 @@ class TaskManager {
     
     // ============ TASKS ============
     
-    getListTasks() {
+    ensureTasksArray() {
         if (!Array.isArray(this.tasks)) {
-            console.warn('this.tasks is not an array in getListTasks, resetting...');
+            console.error('this.tasks was not an array! Type:', typeof this.tasks, 'Value:', this.tasks);
             this.tasks = [];
         }
+        return this.tasks;
+    }
+    
+    getListTasks() {
+        this.ensureTasksArray();
         const filtered = this.tasks.filter(t => {
             // Normalize both to numbers for comparison
             const taskListId = Number(t.list_id);
@@ -695,10 +703,7 @@ class TaskManager {
         };
         
         // Ensure tasks is an array - check right before use
-        if (!Array.isArray(this.tasks)) {
-            console.warn('this.tasks was not an array, resetting...');
-            this.tasks = [];
-        }
+        this.ensureTasksArray();
         
         if (this.isOnline) {
             try {
@@ -718,10 +723,7 @@ class TaskManager {
                         created.list_id = Number(created.list_id);
                     }
                     // CRITICAL: Ensure tasks is an array right before use
-                    if (!Array.isArray(this.tasks)) {
-                        console.error('this.tasks is not an array before unshift! Type:', typeof this.tasks, 'Value:', this.tasks);
-                        this.tasks = [];
-                    }
+                    this.ensureTasksArray();
                     // Double check after potential async operations
                     if (typeof this.tasks.unshift !== 'function') {
                         console.error('this.tasks.unshift is not a function! this.tasks:', this.tasks);
@@ -746,7 +748,7 @@ class TaskManager {
                     }
                     
                     // Fallback to local storage on error
-                    if (!Array.isArray(this.tasks)) this.tasks = [];
+                    this.ensureTasksArray();
                     task.id = this.generateId();
                     task.completed = false; // Ensure boolean
                     this.tasks.unshift(task);
@@ -756,14 +758,14 @@ class TaskManager {
                 console.error('Error creating task:', e);
                 // Fallback to local storage on network error
                 this.isOnline = false;
-                if (!Array.isArray(this.tasks)) this.tasks = [];
+                this.ensureTasksArray();
                 task.id = this.generateId();
                 task.completed = false; // Ensure boolean
                 this.tasks.unshift(task);
                 this.saveToLocalStorage();
             }
         } else {
-            if (!Array.isArray(this.tasks)) this.tasks = [];
+            this.ensureTasksArray();
             task.id = this.generateId();
             task.completed = false; // Ensure boolean
             this.tasks.unshift(task);
