@@ -264,6 +264,12 @@ class TaskManager {
             if (!Array.isArray(this.lists)) this.lists = [];
             if (!Array.isArray(this.tasks)) this.tasks = [];
             
+            // Normalize completed field from integer (0/1) to boolean
+            this.tasks = this.tasks.map(t => ({
+                ...t,
+                completed: !!t.completed
+            }));
+            
             if (this.lists.length === 0) {
                 await this.createList('My Tasks');
             }
@@ -618,7 +624,11 @@ class TaskManager {
     // ============ TASKS ============
     
     getListTasks() {
-        return this.tasks.filter(t => t.list_id === this.currentListId || t.list_id == this.currentListId);
+        const filtered = this.tasks.filter(t => {
+            const matches = t.list_id === this.currentListId || t.list_id == this.currentListId;
+            return matches;
+        });
+        return filtered;
     }
     
     async addTask(text) {
@@ -650,7 +660,10 @@ class TaskManager {
                 
                 if (res.ok) {
                     const created = await res.json();
+                    // Normalize completed field from integer (0/1) to boolean
+                    created.completed = !!created.completed;
                     this.tasks.unshift(created);
+                    console.log('Task added:', created);
                 } else {
                     console.error('Failed to create task:', await res.text());
                     // Fallback to local storage on error
@@ -686,6 +699,8 @@ class TaskManager {
                 body: JSON.stringify(updates)
             });
             const updated = await res.json();
+            // Normalize completed field from integer (0/1) to boolean
+            updated.completed = !!updated.completed;
             const idx = this.tasks.findIndex(t => t.id === id);
             if (idx !== -1) this.tasks[idx] = updated;
         } else {
@@ -835,6 +850,11 @@ class TaskManager {
         const listTasks = this.getListTasks();
         let activeTasks = listTasks.filter(t => !t.completed);
         let completedTasks = listTasks.filter(t => t.completed);
+        
+        console.log('Render - Current List ID:', this.currentListId);
+        console.log('Render - All tasks:', this.tasks.length);
+        console.log('Render - List tasks:', listTasks.length);
+        console.log('Render - Active tasks:', activeTasks.length);
         
         activeTasks = this.sortTasks(activeTasks);
         completedTasks.sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
