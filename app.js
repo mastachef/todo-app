@@ -780,10 +780,16 @@ class TaskManager {
         this.modalNotes.value = task.notes || '';
         this.setModalPriority(task.priority || 'none');
         
-        // Reminder
+        // Reminder - convert to local time for datetime-local input
         if (task.reminder_time) {
             const dt = new Date(task.reminder_time);
-            this.reminderTime.value = dt.toISOString().slice(0, 16);
+            // Format as local datetime string (YYYY-MM-DDTHH:MM)
+            const year = dt.getFullYear();
+            const month = String(dt.getMonth() + 1).padStart(2, '0');
+            const day = String(dt.getDate()).padStart(2, '0');
+            const hours = String(dt.getHours()).padStart(2, '0');
+            const minutes = String(dt.getMinutes()).padStart(2, '0');
+            this.reminderTime.value = `${year}-${month}-${day}T${hours}:${minutes}`;
         } else {
             this.reminderTime.value = '';
         }
