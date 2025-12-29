@@ -254,15 +254,24 @@ class TaskManager {
             ]);
             
             if (!listsRes.ok || !tasksRes.ok) {
+                // If 401, user session expired
+                if (listsRes.status === 401 || tasksRes.status === 401) {
+                    console.log('Session expired, switching to offline mode');
+                    this.isOnline = false;
+                    this.user = null;
+                    this.loadFromLocalStorage();
+                    this.showApp();
+                    return;
+                }
                 throw new Error('Unauthorized or server error');
             }
             
-            this.lists = await listsRes.json();
-            this.tasks = await tasksRes.json();
+            const listsData = await listsRes.json();
+            const tasksData = await tasksRes.json();
             
-            // Ensure they are arrays
-            if (!Array.isArray(this.lists)) this.lists = [];
-            if (!Array.isArray(this.tasks)) this.tasks = [];
+            // Ensure they are arrays before assigning
+            this.lists = Array.isArray(listsData) ? listsData : [];
+            this.tasks = Array.isArray(tasksData) ? tasksData : [];
             
             // Normalize completed field from integer (0/1) to boolean
             this.tasks = this.tasks.map(t => ({
@@ -282,6 +291,8 @@ class TaskManager {
             console.error('Failed to load from server:', e);
             // Fallback to offline mode
             this.isOnline = false;
+            // Ensure tasks is an array before loading from localStorage
+            if (!Array.isArray(this.tasks)) this.tasks = [];
             this.loadFromLocalStorage();
             this.showApp();
         }
@@ -624,6 +635,10 @@ class TaskManager {
     // ============ TASKS ============
     
     getListTasks() {
+        if (!Array.isArray(this.tasks)) {
+            console.warn('this.tasks is not an array in getListTasks, resetting...');
+            this.tasks = [];
+        }
         const filtered = this.tasks.filter(t => {
             const matches = t.list_id === this.currentListId || t.list_id == this.currentListId;
             return matches;
@@ -644,8 +659,9 @@ class TaskManager {
             reminder_repeat: null
         };
         
-        // Ensure tasks is an array
+        // Ensure tasks is an array - check right before use
         if (!Array.isArray(this.tasks)) {
+            console.warn('this.tasks was not an array, resetting...');
             this.tasks = [];
         }
         
@@ -662,13 +678,27 @@ class TaskManager {
                     const created = await res.json();
                     // Normalize completed field from integer (0/1) to boolean
                     created.completed = !!created.completed;
+                    // Ensure tasks is still an array before adding
+                    if (!Array.isArray(this.tasks)) this.tasks = [];
                     this.tasks.unshift(created);
                     console.log('Task added:', created);
                 } else {
-                    console.error('Failed to create task:', await res.text());
+                    const errorText = await res.text();
+                    console.error('Failed to create task:', res.status, errorText);
+                    
+                    // If 401, user is not authenticated - switch to offline mode
+                    if (res.status === 401) {
+                        console.log('Session expired, switching to offline mode');
+                        this.isOnline = false;
+                        this.user = null;
+                        // Load from localStorage if available
+                        this.loadFromLocalStorage();
+                    }
+                    
                     // Fallback to local storage on error
-                    this.isOnline = false;
+                    if (!Array.isArray(this.tasks)) this.tasks = [];
                     task.id = this.generateId();
+                    task.completed = false; // Ensure boolean
                     this.tasks.unshift(task);
                     this.saveToLocalStorage();
                 }
@@ -676,12 +706,16 @@ class TaskManager {
                 console.error('Error creating task:', e);
                 // Fallback to local storage on network error
                 this.isOnline = false;
+                if (!Array.isArray(this.tasks)) this.tasks = [];
                 task.id = this.generateId();
+                task.completed = false; // Ensure boolean
                 this.tasks.unshift(task);
                 this.saveToLocalStorage();
             }
         } else {
+            if (!Array.isArray(this.tasks)) this.tasks = [];
             task.id = this.generateId();
+            task.completed = false; // Ensure boolean
             this.tasks.unshift(task);
             this.saveToLocalStorage();
         }
