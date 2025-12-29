@@ -1,9 +1,8 @@
 import { handleOptions, jsonResponse, errorResponse } from './_helpers.js';
 
-// VAPID keys for web push
-// Generate your own at: https://vapidkeys.com/ or use web-push generate-vapid-keys
-// Set these as environment variables: VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+// VAPID keys for web push - MUST match between client subscription and server sending
+// These are the keys generated for this app - set in Netlify env vars for production
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BPaRdrXvX8_-BOxAJ2n6mf4_qYqa1EVKlW7y4EDY6xHMh3emtgG_ygjWlbXKTtYASJLrbc6svLQVYiwmGIX4yCc';
 
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
@@ -14,6 +13,7 @@ export async function handler(event) {
     return errorResponse(405, 'Method not allowed');
   }
 
+  console.log('VAPID public key requested');
   return jsonResponse(200, { key: VAPID_PUBLIC });
 }
 

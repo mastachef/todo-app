@@ -2,14 +2,15 @@ import webpush from 'web-push';
 import db from './db.js';
 import { jsonResponse, errorResponse } from './_helpers.js';
 
-// VAPID keys - set these in Netlify environment variables
-// Generate your own at: https://vapidkeys.com/
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || 'UUxI4O8-FbRouAevSmBQ6o18hgE4nSG3qwvJTWKvtHA';
-const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:admin@example.com';
+// VAPID keys - MUST match api-push-vapid.js
+// These are the keys generated for this app
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BPaRdrXvX8_-BOxAJ2n6mf4_qYqa1EVKlW7y4EDY6xHMh3emtgG_ygjWlbXKTtYASJLrbc6svLQVYiwmGIX4yCc';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '9YMd1Y19f6r7A98W1f_lh51bX9MZ4NSGNmfczNAFHf4';
+const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:todo-app@example.com';
 
 // Initialize web-push with VAPID credentials
 webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC, VAPID_PRIVATE);
+console.log('Web-push initialized with VAPID keys');
 
 // This function is triggered by Netlify Scheduled Functions
 // It checks for due reminders and sends push notifications
@@ -32,22 +33,19 @@ export async function handler(event) {
     `);
 
     const now = new Date();
+    console.log(`Current server time: ${now.toISOString()}`);
     
-    // Find tasks with reminders that are due
-    // Use a 10-minute window to catch any missed reminders
-    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
-    
+    // Find ALL tasks with reminders that are due (reminder_time <= now)
+    // We'll handle duplicates by clearing/rescheduling reminders after sending
     const dueTasks = await db.queryAll(`
       SELECT t.*, t.user_id as uid
       FROM tasks t
       WHERE t.completed = false 
       AND t.reminder_time IS NOT NULL 
       AND t.reminder_time <= $1
-      AND t.reminder_time > $2
-    `, [now.toISOString(), tenMinutesAgo.toISOString()]);
+    `, [now.toISOString()]);
     
-    console.log(`Current time: ${now.toISOString()}`);
-    console.log(`Checking for reminders between ${tenMinutesAgo.toISOString()} and ${now.toISOString()}`);
+    console.log(`Found ${dueTasks.length} tasks with due reminders`);
 
     console.log(`Found ${dueTasks.length} due reminders`);
 
