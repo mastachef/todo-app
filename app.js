@@ -11,7 +11,12 @@ class TaskManager {
         this.currentSort = 'newest';
         this.editingListId = null;
         
-        this.API_BASE = window.location.origin;
+        // Use Render backend if on Netlify, otherwise use current origin
+        const isNetlify = window.location.hostname.includes('netlify.app') || 
+                         window.location.hostname.includes('netlify.com');
+        this.API_BASE = isNetlify 
+            ? 'https://todo-app-yyrd.onrender.com'  // Your Render backend URL
+            : window.location.origin;
         
         this.cacheDOM();
         this.init();
@@ -248,8 +253,16 @@ class TaskManager {
                 fetch(`${this.API_BASE}/api/tasks`, { credentials: 'include' })
             ]);
             
+            if (!listsRes.ok || !tasksRes.ok) {
+                throw new Error('Unauthorized or server error');
+            }
+            
             this.lists = await listsRes.json();
             this.tasks = await tasksRes.json();
+            
+            // Ensure they are arrays
+            if (!Array.isArray(this.lists)) this.lists = [];
+            if (!Array.isArray(this.tasks)) this.tasks = [];
             
             if (this.lists.length === 0) {
                 await this.createList('My Tasks');
@@ -261,6 +274,10 @@ class TaskManager {
             this.render();
         } catch (e) {
             console.error('Failed to load from server:', e);
+            // Fallback to offline mode
+            this.isOnline = false;
+            this.loadFromLocalStorage();
+            this.showApp();
         }
     }
     
@@ -617,6 +634,11 @@ class TaskManager {
             reminder_repeat: null
         };
         
+        // Ensure tasks is an array
+        if (!Array.isArray(this.tasks)) {
+            this.tasks = [];
+        }
+        
         if (this.isOnline) {
             try {
                 const res = await fetch(`${this.API_BASE}/api/tasks`, {
@@ -632,6 +654,7 @@ class TaskManager {
                 } else {
                     console.error('Failed to create task:', await res.text());
                     // Fallback to local storage on error
+                    this.isOnline = false;
                     task.id = this.generateId();
                     this.tasks.unshift(task);
                     this.saveToLocalStorage();
@@ -639,6 +662,7 @@ class TaskManager {
             } catch (e) {
                 console.error('Error creating task:', e);
                 // Fallback to local storage on network error
+                this.isOnline = false;
                 task.id = this.generateId();
                 this.tasks.unshift(task);
                 this.saveToLocalStorage();
