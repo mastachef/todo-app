@@ -7,7 +7,8 @@
     --bg-modal: #ffffff;
     --bg-input: #f5f4f2;
     --bg-row-alt: #fffdf5;
-    
+    --text-row-alt: #3d3530;
+
     --text-primary: #2d2d2d;
     --text-secondary: #6b6b6b;
     --text-muted: #999999;
@@ -48,7 +49,8 @@
     --bg-modal: #2a2a2a;
     --bg-input: #333333;
     --bg-row-alt: #2a2a2a;
-    
+    --text-row-alt: #f0e8e0;
+
     --text-primary: #e8e8e8;
     --text-secondary: #a0a0a0;
     --text-muted: #707070;
@@ -832,6 +834,10 @@ body {
 /* Alternating row colors for better readability */
 .task-item:nth-child(odd) {
     background: var(--bg-row-alt);
+}
+
+.task-item:nth-child(odd) .task-text {
+    color: var(--text-row-alt);
 }
 
 .task-item:nth-child(odd):hover {
