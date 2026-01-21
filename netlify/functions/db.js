@@ -15,53 +15,9 @@ const pool = new Pool({
 
 // Initialize database tables
 export async function initDatabase() {
-  const client = await pool.connect();
-  try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        name TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS lists (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS tasks (
-        id SERIAL PRIMARY KEY,
-        list_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        text TEXT NOT NULL,
-        notes TEXT DEFAULT '',
-        priority TEXT DEFAULT 'none',
-        completed BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT NOW(),
-        completed_at TIMESTAMP,
-        reminder_time TIMESTAMP,
-        reminder_repeat TEXT,
-        recurrence TEXT,
-        is_focused BOOLEAN DEFAULT false
-      );
-
-      CREATE TABLE IF NOT EXISTS subtasks (
-        id SERIAL PRIMARY KEY,
-        task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        text TEXT NOT NULL,
-        completed BOOLEAN DEFAULT false,
-        sort_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-  } finally {
-    client.release();
-  }
+  // Tables already exist in Neon - no need to run CREATE on every request
+  // This was causing issues with the subtasks foreign key
+  return;
 }
 
 // Query helper
