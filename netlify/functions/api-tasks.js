@@ -51,10 +51,10 @@ export async function handler(event) {
       }
 
       const task = await db.queryOne(
-        `INSERT INTO tasks (list_id, user_id, text, notes, priority, reminder_time, reminder_repeat, recurrence)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO tasks (list_id, user_id, text, notes, priority, reminder_time, reminder_repeat)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING *`,
-        [list_id, userId, text, notes || '', priority || 'none', reminder_time || null, reminder_repeat || null, recurrence || null]
+        [list_id, userId, text, notes || '', priority || 'none', reminder_time || null, reminder_repeat || null]
       );
 
       return jsonResponse(200, task);
