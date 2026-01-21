@@ -55,6 +55,13 @@ class TaskManager {
         this.sortBtn = document.getElementById('sort-btn');
         this.sortMenu = document.getElementById('sort-menu');
         this.sortLabel = document.getElementById('sort-label');
+
+        // Search
+        this.searchInput = document.getElementById('search-input');
+        this.searchClear = document.getElementById('search-clear');
+        this.searchResults = document.getElementById('search-results');
+        this.searchResultsList = document.getElementById('search-results-list');
+        this.searchResultsCount = document.getElementById('search-results-count');
         
         // Task Modal
         this.taskModal = document.getElementById('task-modal');
@@ -464,6 +471,24 @@ class TaskManager {
             if (e.key === 'Escape') {
                 this.closeTaskModal();
                 this.closeListModal();
+                this.closeSearch();
+            }
+        });
+
+        // Search
+        this.searchInput.addEventListener('input', () => this.handleSearchInput());
+        this.searchInput.addEventListener('focus', () => {
+            if (this.searchInput.value.trim()) {
+                this.searchResults.style.display = 'block';
+            }
+        });
+        this.searchClear.addEventListener('click', () => this.clearSearch());
+
+        // Close search results when clicking outside
+        document.addEventListener('click', (e) => {
+            const searchContainer = document.getElementById('search-container');
+            if (!searchContainer.contains(e.target)) {
+                this.searchResults.style.display = 'none';
             }
         });
     }
@@ -1327,8 +1352,145 @@ class TaskManager {
         console.log(`Rescheduled reminder for task ${task.id} to ${reminderDate.toISOString()}`);
     }
     
+    // ============ SEARCH ============
+
+    handleSearchInput() {
+        const query = this.searchInput.value.trim();
+
+        // Show/hide clear button
+        this.searchClear.style.display = query ? 'block' : 'none';
+
+        // Debounce search
+        clearTimeout(this.searchTimeout);
+
+        if (!query) {
+            this.searchResults.style.display = 'none';
+            return;
+        }
+
+        this.searchTimeout = setTimeout(() => this.performSearch(query), 300);
+    }
+
+    async performSearch(query) {
+        this.searchResults.style.display = 'block';
+        this.searchResultsList.innerHTML = '<li class="search-loading">Searching...</li>';
+
+        try {
+            let results = [];
+
+            if (this.isOnline) {
+                // Search via API
+                const res = await fetch(`${this.API_BASE}/api-tasks-search?q=${encodeURIComponent(query)}`, {
+                    headers: this.getAuthHeaders()
+                });
+
+                if (res.ok) {
+                    results = await res.json();
+                } else {
+                    // Fallback to local search
+                    results = this.searchLocalTasks(query);
+                }
+            } else {
+                // Offline: search local tasks
+                results = this.searchLocalTasks(query);
+            }
+
+            this.renderSearchResults(results, query);
+        } catch (e) {
+            console.error('Search error:', e);
+            // Fallback to local search on error
+            const results = this.searchLocalTasks(query);
+            this.renderSearchResults(results, query);
+        }
+    }
+
+    searchLocalTasks(query) {
+        const lowerQuery = query.toLowerCase();
+        return this.tasks.filter(task => {
+            const textMatch = task.text && task.text.toLowerCase().includes(lowerQuery);
+            const notesMatch = task.notes && task.notes.toLowerCase().includes(lowerQuery);
+            return textMatch || notesMatch;
+        }).map(task => {
+            // Add list name for display
+            const list = this.lists.find(l => String(l.id) === String(task.list_id));
+            return {
+                ...task,
+                list_name: list ? list.name : 'Unknown List'
+            };
+        });
+    }
+
+    renderSearchResults(results, query) {
+        const count = results.length;
+        this.searchResultsCount.textContent = `${count} result${count !== 1 ? 's' : ''}`;
+
+        if (count === 0) {
+            this.searchResultsList.innerHTML = '<li class="search-empty">No tasks found</li>';
+            return;
+        }
+
+        this.searchResultsList.innerHTML = results.map(task => {
+            const highlightedText = this.highlightMatch(task.text, query);
+            const highlightedNotes = task.notes ? this.highlightMatch(task.notes, query) : '';
+            const notesPreview = highlightedNotes ? highlightedNotes.substring(0, 80) + (task.notes.length > 80 ? '...' : '') : '';
+
+            return `
+                <li class="search-result-item ${task.completed ? 'completed' : ''}" data-task-id="${task.id}" data-list-id="${task.list_id}">
+                    <span class="search-result-checkbox"></span>
+                    <div class="search-result-content">
+                        <div class="search-result-text">${highlightedText}</div>
+                        ${notesPreview ? `<div class="search-result-notes">${notesPreview}</div>` : ''}
+                        <div class="search-result-meta">
+                            <span class="search-result-list-name">${this.escapeHTML(task.list_name)}</span>
+                        </div>
+                    </div>
+                </li>
+            `;
+        }).join('');
+
+        // Bind click events on search results
+        this.searchResultsList.querySelectorAll('.search-result-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const taskId = item.dataset.taskId;
+                const listId = item.dataset.listId;
+
+                // Switch to the list containing this task
+                if (String(listId) !== String(this.currentListId)) {
+                    this.switchList(listId);
+                }
+
+                // Close search and open task modal
+                this.closeSearch();
+                this.openTaskModal(taskId);
+            });
+        });
+    }
+
+    highlightMatch(text, query) {
+        if (!text || !query) return this.escapeHTML(text || '');
+
+        const escaped = this.escapeHTML(text);
+        const regex = new RegExp(`(${this.escapeRegex(query)})`, 'gi');
+        return escaped.replace(regex, '<mark>$1</mark>');
+    }
+
+    escapeRegex(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    clearSearch() {
+        this.searchInput.value = '';
+        this.searchClear.style.display = 'none';
+        this.searchResults.style.display = 'none';
+        this.searchInput.focus();
+    }
+
+    closeSearch() {
+        this.searchResults.style.display = 'none';
+    }
+
     // ============ UTILITIES ============
-    
+
     generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2); }
     
     formatDateFull(iso) {

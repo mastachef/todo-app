@@ -122,6 +122,29 @@
                 </div>
             </div>
             
+            <!-- Search Bar -->
+            <div class="search-container" id="search-container">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="search-input" class="search-input" placeholder="Search tasks..." autocomplete="off">
+                    <button class="search-clear" id="search-clear" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="search-results" id="search-results" style="display: none;">
+                    <div class="search-results-header">
+                        <span id="search-results-count">0 results</span>
+                    </div>
+                    <ul class="search-results-list" id="search-results-list"></ul>
+                </div>
+            </div>
+
             <!-- List Tabs -->
             <nav class="list-tabs" id="list-tabs"></nav>
         </header>
