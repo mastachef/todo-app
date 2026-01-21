@@ -76,6 +76,13 @@
             <div class="header-top">
                 <h1 class="document-title" contenteditable="true" data-placeholder="My Tasks">My Tasks</h1>
                 <div class="header-actions">
+                    <!-- Search Button -->
+                    <button class="icon-btn" id="search-btn" title="Search tasks">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                    </button>
                     <div class="user-menu-wrapper">
                         <button class="icon-btn" id="user-menu-btn" title="Account">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -122,29 +129,6 @@
                 </div>
             </div>
             
-            <!-- Search Bar -->
-            <div class="search-container" id="search-container">
-                <div class="search-input-wrapper">
-                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"/>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    </svg>
-                    <input type="text" id="search-input" class="search-input" placeholder="Search tasks..." autocomplete="off">
-                    <button class="search-clear" id="search-clear" style="display: none;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="18" y1="6" x2="6" y2="18"/>
-                            <line x1="6" y1="6" x2="18" y2="18"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="search-results" id="search-results" style="display: none;">
-                    <div class="search-results-header">
-                        <span id="search-results-count">0 results</span>
-                    </div>
-                    <ul class="search-results-list" id="search-results-list"></ul>
-                </div>
-            </div>
-
             <!-- List Tabs -->
             <nav class="list-tabs" id="list-tabs"></nav>
         </header>
@@ -314,6 +298,37 @@
             <div class="modal-actions">
                 <button class="modal-btn modal-btn-delete" id="list-delete" style="display: none;">Delete List</button>
                 <button class="modal-btn modal-btn-save" id="list-save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Modal -->
+    <div class="modal-overlay" id="search-modal">
+        <div class="modal-content search-modal-content">
+            <button class="modal-close" id="search-modal-close" aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+            <div class="search-modal-body">
+                <div class="search-input-wrapper">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" id="search-input" class="search-input" placeholder="Search tasks..." autocomplete="off">
+                    <button class="search-clear" id="search-clear" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="search-results-header" id="search-results-header" style="display: none;">
+                    <span id="search-results-count">0 results</span>
+                </div>
+                <ul class="search-results-list" id="search-results-list"></ul>
             </div>
         </div>
     </div>

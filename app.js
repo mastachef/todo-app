@@ -57,9 +57,12 @@ class TaskManager {
         this.sortLabel = document.getElementById('sort-label');
 
         // Search
+        this.searchBtn = document.getElementById('search-btn');
+        this.searchModal = document.getElementById('search-modal');
+        this.searchModalClose = document.getElementById('search-modal-close');
         this.searchInput = document.getElementById('search-input');
         this.searchClear = document.getElementById('search-clear');
-        this.searchResults = document.getElementById('search-results');
+        this.searchResultsHeader = document.getElementById('search-results-header');
         this.searchResultsList = document.getElementById('search-results-list');
         this.searchResultsCount = document.getElementById('search-results-count');
         
@@ -290,7 +293,10 @@ class TaskManager {
             if (this.lists.length === 0) {
                 await this.createList('My Tasks');
             }
-            
+
+            // Apply saved list order
+            this.applyListOrder();
+
             this.currentListId = Number(this.lists[0]?.id);
             this.updateTitle();
             this.renderTabs();
@@ -313,18 +319,21 @@ class TaskManager {
             this.tasks = data.tasks || [];
             this.currentListId = data.currentListId;
         }
-        
+
         if (this.lists.length === 0) {
             const defaultList = { id: this.generateId(), name: 'My Tasks' };
             this.lists.push(defaultList);
             this.currentListId = defaultList.id;
             this.saveToLocalStorage();
         }
-        
+
+        // Apply saved list order
+        this.applyListOrder();
+
         if (!this.lists.find(l => String(l.id) === String(this.currentListId))) {
             this.currentListId = this.lists[0]?.id;
         }
-        
+
         this.updateTitle();
         this.renderTabs();
         this.render();
@@ -471,26 +480,18 @@ class TaskManager {
             if (e.key === 'Escape') {
                 this.closeTaskModal();
                 this.closeListModal();
-                this.closeSearch();
+                this.closeSearchModal();
             }
         });
 
-        // Search
+        // Search Modal
+        this.searchBtn.addEventListener('click', () => this.openSearchModal());
+        this.searchModalClose.addEventListener('click', () => this.closeSearchModal());
+        this.searchModal.addEventListener('click', (e) => {
+            if (e.target === this.searchModal) this.closeSearchModal();
+        });
         this.searchInput.addEventListener('input', () => this.handleSearchInput());
-        this.searchInput.addEventListener('focus', () => {
-            if (this.searchInput.value.trim()) {
-                this.searchResults.style.display = 'block';
-            }
-        });
         this.searchClear.addEventListener('click', () => this.clearSearch());
-
-        // Close search results when clicking outside
-        document.addEventListener('click', (e) => {
-            const searchContainer = document.getElementById('search-container');
-            if (!searchContainer.contains(e.target)) {
-                this.searchResults.style.display = 'none';
-            }
-        });
     }
     
     // ============ LISTS ============
@@ -624,8 +625,11 @@ class TaskManager {
     }
     
     renderTabs() {
-        const html = this.lists.map(list => `
-            <button class="list-tab ${String(list.id) === String(this.currentListId) ? 'active' : ''}" data-list-id="${list.id}">
+        const html = this.lists.map((list, index) => `
+            <button class="list-tab ${String(list.id) === String(this.currentListId) ? 'active' : ''}"
+                    data-list-id="${list.id}"
+                    data-index="${index}"
+                    draggable="true">
                 <span class="list-tab-name">${this.escapeHTML(list.name)}</span>
                 <svg class="edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" data-edit="${list.id}">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -640,10 +644,11 @@ class TaskManager {
                 </svg>
             </button>
         `;
-        
+
         this.listTabs.innerHTML = html;
-        
+
         this.listTabs.querySelectorAll('.list-tab').forEach(tab => {
+            // Click handler
             tab.addEventListener('click', (e) => {
                 const editIcon = e.target.closest('.edit-icon');
                 if (editIcon) {
@@ -653,9 +658,108 @@ class TaskManager {
                     this.switchList(tab.dataset.listId);
                 }
             });
+
+            // Drag and drop handlers
+            tab.addEventListener('dragstart', (e) => this.handleTabDragStart(e, tab));
+            tab.addEventListener('dragend', (e) => this.handleTabDragEnd(e, tab));
+            tab.addEventListener('dragover', (e) => this.handleTabDragOver(e, tab));
+            tab.addEventListener('dragleave', (e) => this.handleTabDragLeave(e, tab));
+            tab.addEventListener('drop', (e) => this.handleTabDrop(e, tab));
         });
-        
+
         document.getElementById('add-list-btn').addEventListener('click', () => this.addList());
+    }
+
+    // ============ LIST TAB DRAG & DROP ============
+
+    handleTabDragStart(e, tab) {
+        this.draggedTabIndex = parseInt(tab.dataset.index);
+        tab.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', tab.dataset.index);
+    }
+
+    handleTabDragEnd(e, tab) {
+        tab.classList.remove('dragging');
+        this.listTabs.querySelectorAll('.list-tab').forEach(t => {
+            t.classList.remove('drag-over');
+        });
+        this.draggedTabIndex = null;
+    }
+
+    handleTabDragOver(e, tab) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        const targetIndex = parseInt(tab.dataset.index);
+        if (this.draggedTabIndex !== targetIndex) {
+            tab.classList.add('drag-over');
+        }
+    }
+
+    handleTabDragLeave(e, tab) {
+        tab.classList.remove('drag-over');
+    }
+
+    async handleTabDrop(e, tab) {
+        e.preventDefault();
+        tab.classList.remove('drag-over');
+
+        const fromIndex = this.draggedTabIndex;
+        const toIndex = parseInt(tab.dataset.index);
+
+        if (fromIndex === toIndex || fromIndex === null) return;
+
+        // Reorder the lists array
+        const [movedList] = this.lists.splice(fromIndex, 1);
+        this.lists.splice(toIndex, 0, movedList);
+
+        // Save the new order
+        if (!this.isOnline) {
+            this.saveToLocalStorage();
+        } else {
+            // For online mode, we'll save to localStorage as well for order persistence
+            this.saveListOrder();
+        }
+
+        // Re-render tabs
+        this.renderTabs();
+    }
+
+    saveListOrder() {
+        // Save list order to localStorage (works for both online and offline)
+        const listOrder = this.lists.map(l => l.id);
+        localStorage.setItem('taskManager_listOrder', JSON.stringify(listOrder));
+    }
+
+    applyListOrder() {
+        // Apply saved list order if it exists
+        const savedOrder = localStorage.getItem('taskManager_listOrder');
+        if (!savedOrder) return;
+
+        try {
+            const orderArray = JSON.parse(savedOrder);
+            const orderedLists = [];
+
+            // First add lists in saved order
+            for (const id of orderArray) {
+                const list = this.lists.find(l => String(l.id) === String(id));
+                if (list) {
+                    orderedLists.push(list);
+                }
+            }
+
+            // Then add any new lists not in saved order
+            for (const list of this.lists) {
+                if (!orderedLists.find(l => String(l.id) === String(list.id))) {
+                    orderedLists.push(list);
+                }
+            }
+
+            this.lists = orderedLists;
+        } catch (e) {
+            console.log('Could not apply saved list order');
+        }
     }
     
     openListModal() { this.listModal.classList.add('open'); this.listNameInput.focus(); }
@@ -1354,6 +1458,16 @@ class TaskManager {
     
     // ============ SEARCH ============
 
+    openSearchModal() {
+        this.searchModal.classList.add('open');
+        this.searchInput.focus();
+    }
+
+    closeSearchModal() {
+        this.searchModal.classList.remove('open');
+        this.clearSearch();
+    }
+
     handleSearchInput() {
         const query = this.searchInput.value.trim();
 
@@ -1364,7 +1478,8 @@ class TaskManager {
         clearTimeout(this.searchTimeout);
 
         if (!query) {
-            this.searchResults.style.display = 'none';
+            this.searchResultsHeader.style.display = 'none';
+            this.searchResultsList.innerHTML = '<li class="search-empty">Type to search tasks...</li>';
             return;
         }
 
@@ -1372,7 +1487,7 @@ class TaskManager {
     }
 
     async performSearch(query) {
-        this.searchResults.style.display = 'block';
+        this.searchResultsHeader.style.display = 'block';
         this.searchResultsList.innerHTML = '<li class="search-loading">Searching...</li>';
 
         try {
@@ -1459,8 +1574,8 @@ class TaskManager {
                     this.switchList(listId);
                 }
 
-                // Close search and open task modal
-                this.closeSearch();
+                // Close search modal and open task modal
+                this.closeSearchModal();
                 this.openTaskModal(taskId);
             });
         });
@@ -1481,12 +1596,8 @@ class TaskManager {
     clearSearch() {
         this.searchInput.value = '';
         this.searchClear.style.display = 'none';
-        this.searchResults.style.display = 'none';
-        this.searchInput.focus();
-    }
-
-    closeSearch() {
-        this.searchResults.style.display = 'none';
+        this.searchResultsHeader.style.display = 'none';
+        this.searchResultsList.innerHTML = '<li class="search-empty">Type to search tasks...</li>';
     }
 
     // ============ UTILITIES ============

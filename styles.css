@@ -517,16 +517,26 @@ body {
     display: block;
 }
 
-/* Search Bar */
-.search-container {
-    margin-bottom: 1rem;
-    position: relative;
+/* Search Modal */
+.search-modal-content {
+    max-width: 550px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.search-modal-body {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .search-input-wrapper {
     position: relative;
     display: flex;
     align-items: center;
+    margin-bottom: 1rem;
 }
 
 .search-icon {
@@ -540,11 +550,11 @@ body {
 
 .search-input {
     width: 100%;
-    padding: 0.65rem 2.5rem 0.65rem 2.5rem;
+    padding: 0.85rem 2.5rem 0.85rem 2.75rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: 1rem;
     color: var(--text-primary);
     background: var(--bg-input);
     transition: var(--transition);
@@ -563,9 +573,9 @@ body {
 .search-clear {
     position: absolute;
     right: 0.5rem;
-    width: 24px;
-    height: 24px;
-    padding: 4px;
+    width: 28px;
+    height: 28px;
+    padding: 5px;
     background: none;
     border: none;
     cursor: pointer;
@@ -585,33 +595,21 @@ body {
 }
 
 /* Search Results */
-.search-results {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    margin-top: 0.5rem;
-    background: var(--bg-modal);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-lg);
-    z-index: 200;
-    max-height: 400px;
-    overflow-y: auto;
-}
-
 .search-results-header {
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--border);
+    padding: 0.5rem 0;
     font-size: 0.8rem;
     color: var(--text-muted);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
 }
 
 .search-results-list {
     list-style: none;
+    overflow-y: auto;
+    max-height: 400px;
+    margin: 0 -1.5rem;
     padding: 0.5rem 0;
 }
 
@@ -619,7 +617,7 @@ body {
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
+    padding: 0.75rem 1.5rem;
     cursor: pointer;
     transition: var(--transition);
 }
@@ -802,6 +800,24 @@ body {
 .add-list-btn svg {
     width: 16px;
     height: 16px;
+}
+
+/* Draggable List Tabs */
+.list-tab.dragging {
+    opacity: 0.5;
+    background: var(--accent-light);
+}
+
+.list-tab.drag-over {
+    border-left: 2px solid var(--accent);
+}
+
+.list-tab {
+    cursor: grab;
+}
+
+.list-tab:active {
+    cursor: grabbing;
 }
 
 /* Main Body */
