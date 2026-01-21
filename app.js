@@ -26,6 +26,9 @@ class TaskManager {
         this.timerRunning = false;
         this.isBreakTime = false;
 
+        // Subtasks
+        this.subtasks = {}; // Keyed by task_id
+
         // Use Netlify Functions
         this.API_BASE = '/.netlify/functions';
         
@@ -130,6 +133,14 @@ class TaskManager {
         this.timerReset = document.getElementById('timer-reset');
         this.workDuration = document.getElementById('work-duration');
         this.breakDuration = document.getElementById('break-duration');
+
+        // Subtasks
+        this.subtasksList = document.getElementById('subtasks-list');
+        this.subtaskInput = document.getElementById('subtask-input');
+        this.subtaskAddBtn = document.getElementById('subtask-add-btn');
+        this.subtaskProgress = document.getElementById('subtask-progress');
+        this.subtaskProgressFill = document.getElementById('subtask-progress-fill');
+        this.subtaskProgressText = document.getElementById('subtask-progress-text');
     }
     
     async init() {
@@ -562,8 +573,16 @@ class TaskManager {
         this.timerReset.addEventListener('click', () => this.resetTimer());
         this.workDuration.addEventListener('change', () => this.updateTimerSettings());
         this.breakDuration.addEventListener('change', () => this.updateTimerSettings());
+
+        // Subtasks
+        this.subtaskAddBtn.addEventListener('click', () => this.addSubtask());
+        this.subtaskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && this.subtaskInput.value.trim()) {
+                this.addSubtask();
+            }
+        });
     }
-    
+
     // ============ LISTS ============
     
     async createList(name) {
@@ -1071,11 +1090,14 @@ class TaskManager {
             </div>` : ''}
         `;
         
+        // Load subtasks
+        this.loadSubtasks(taskId);
+
         this.taskModal.classList.add('open');
         this.taskModal.setAttribute('aria-hidden', 'false');
         this.modalTaskText.focus();
     }
-    
+
     closeTaskModal() {
         this.taskModal.classList.remove('open');
         this.taskModal.setAttribute('aria-hidden', 'true');
@@ -1194,6 +1216,10 @@ class TaskManager {
         const selectionModeClass = this.selectionMode ? 'selection-mode' : '';
         const selectedClass = isSelected ? 'selected' : '';
 
+        // Get subtask stats
+        const subtaskStats = this.getSubtaskStats(task.id);
+        const subtaskIndicator = subtaskStats ? `<span class="task-subtasks-indicator ${subtaskStats.completed === subtaskStats.total ? 'has-completed' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> ${subtaskStats.completed}/${subtaskStats.total}</span>` : '';
+
         return `
             <li class="task-item ${task.completed ? 'completed' : ''} ${selectionModeClass} ${selectedClass}" data-id="${task.id}">
                 <label class="task-selection-checkbox" onclick="event.stopPropagation()">
@@ -1210,6 +1236,7 @@ class TaskManager {
                     ${hasNotes ? `<p class="task-notes-preview">${this.escapeHTML(notesPreview)}</p>` : ''}
                     ${hasReminder ? `<span class="task-reminder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Reminder set</span>` : ''}
                     ${hasRecurrence ? `<span class="task-recurrence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H4.2"/></svg> ${recurrenceLabels[task.recurrence] || task.recurrence}</span>` : ''}
+                    ${subtaskIndicator}
                 </button>
                 ${priorityFlag}
             </li>
@@ -2077,6 +2104,183 @@ class TaskManager {
 
         this.showUndoToast(`Deleted ${count} task${count > 1 ? 's' : ''}`);
         this.exitSelectionMode();
+    }
+
+    // ============ SUBTASKS ============
+
+    async loadSubtasks(taskId) {
+        this.subtaskInput.value = '';
+
+        if (this.isOnline) {
+            try {
+                const res = await fetch(`${this.API_BASE}/api-subtasks?task_id=${taskId}`, {
+                    headers: this.getAuthHeaders()
+                });
+                if (res.ok) {
+                    const subtasks = await res.json();
+                    this.subtasks[taskId] = subtasks;
+                }
+            } catch (e) {
+                console.error('Failed to load subtasks:', e);
+            }
+        }
+
+        // Load from local storage for offline mode
+        if (!this.subtasks[taskId]) {
+            const stored = localStorage.getItem(`subtasks_${taskId}`);
+            this.subtasks[taskId] = stored ? JSON.parse(stored) : [];
+        }
+
+        this.renderSubtasks();
+    }
+
+    renderSubtasks() {
+        const taskId = this.currentTaskId;
+        const subtasks = this.subtasks[taskId] || [];
+
+        if (subtasks.length === 0) {
+            this.subtasksList.innerHTML = '<p class="subtasks-empty" style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 0.5rem;">No subtasks yet</p>';
+            this.subtaskProgress.style.display = 'none';
+            return;
+        }
+
+        this.subtasksList.innerHTML = subtasks.map(st => `
+            <div class="subtask-item ${st.completed ? 'completed' : ''}" data-id="${st.id}">
+                <label class="subtask-checkbox">
+                    <input type="checkbox" ${st.completed ? 'checked' : ''}>
+                </label>
+                <span class="subtask-text">${this.escapeHTML(st.text)}</span>
+                <button class="subtask-delete" title="Delete subtask">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+
+        // Bind events
+        this.subtasksList.querySelectorAll('.subtask-checkbox input').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const id = e.target.closest('.subtask-item').dataset.id;
+                this.toggleSubtask(id);
+            });
+        });
+
+        this.subtasksList.querySelectorAll('.subtask-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.target.closest('.subtask-item').dataset.id;
+                this.deleteSubtask(id);
+            });
+        });
+
+        // Update progress
+        const completed = subtasks.filter(st => st.completed).length;
+        const total = subtasks.length;
+        const percent = Math.round((completed / total) * 100);
+
+        this.subtaskProgress.style.display = 'flex';
+        this.subtaskProgressFill.style.width = `${percent}%`;
+        this.subtaskProgressText.textContent = `${completed}/${total}`;
+    }
+
+    async addSubtask() {
+        const text = this.subtaskInput.value.trim();
+        if (!text || !this.currentTaskId) return;
+
+        const taskId = this.currentTaskId;
+
+        if (this.isOnline) {
+            try {
+                const res = await fetch(`${this.API_BASE}/api-subtasks`, {
+                    method: 'POST',
+                    headers: this.getAuthHeaders(),
+                    body: JSON.stringify({ task_id: taskId, text })
+                });
+                if (res.ok) {
+                    const subtask = await res.json();
+                    if (!this.subtasks[taskId]) this.subtasks[taskId] = [];
+                    this.subtasks[taskId].push(subtask);
+                }
+            } catch (e) {
+                console.error('Failed to add subtask:', e);
+            }
+        } else {
+            // Offline mode
+            const subtask = {
+                id: this.generateId(),
+                task_id: taskId,
+                text,
+                completed: false,
+                sort_order: (this.subtasks[taskId]?.length || 0)
+            };
+            if (!this.subtasks[taskId]) this.subtasks[taskId] = [];
+            this.subtasks[taskId].push(subtask);
+            localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
+        }
+
+        this.subtaskInput.value = '';
+        this.renderSubtasks();
+        this.render(); // Update task list to show subtask indicator
+    }
+
+    async toggleSubtask(subtaskId) {
+        const taskId = this.currentTaskId;
+        const subtasks = this.subtasks[taskId] || [];
+        const subtask = subtasks.find(st => String(st.id) === String(subtaskId));
+
+        if (!subtask) return;
+
+        subtask.completed = !subtask.completed;
+
+        if (this.isOnline) {
+            try {
+                await fetch(`${this.API_BASE}/api-subtasks-id/${subtaskId}`, {
+                    method: 'PUT',
+                    headers: this.getAuthHeaders(),
+                    body: JSON.stringify({ completed: subtask.completed })
+                });
+            } catch (e) {
+                console.error('Failed to toggle subtask:', e);
+            }
+        } else {
+            localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
+        }
+
+        this.renderSubtasks();
+        this.render(); // Update task list to show subtask progress
+    }
+
+    async deleteSubtask(subtaskId) {
+        const taskId = this.currentTaskId;
+
+        if (this.isOnline) {
+            try {
+                await fetch(`${this.API_BASE}/api-subtasks-id/${subtaskId}`, {
+                    method: 'DELETE',
+                    headers: this.getAuthHeaders()
+                });
+            } catch (e) {
+                console.error('Failed to delete subtask:', e);
+            }
+        }
+
+        this.subtasks[taskId] = (this.subtasks[taskId] || []).filter(st => String(st.id) !== String(subtaskId));
+
+        if (!this.isOnline) {
+            localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
+        }
+
+        this.renderSubtasks();
+        this.render(); // Update task list
+    }
+
+    getSubtaskStats(taskId) {
+        const subtasks = this.subtasks[taskId] || [];
+        if (subtasks.length === 0) return null;
+
+        const completed = subtasks.filter(st => st.completed).length;
+        return { completed, total: subtasks.length };
     }
 
     // ============ FOCUS MODE ============

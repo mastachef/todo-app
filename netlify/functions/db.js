@@ -48,6 +48,16 @@ export async function initDatabase() {
         recurrence TEXT,
         is_focused BOOLEAN DEFAULT false
       );
+
+      CREATE TABLE IF NOT EXISTS subtasks (
+        id SERIAL PRIMARY KEY,
+        task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        completed BOOLEAN DEFAULT false,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
     `);
   } finally {
     client.release();

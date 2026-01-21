@@ -2000,6 +2000,182 @@ body {
     color: var(--text-muted);
 }
 
+/* Subtasks Section */
+.modal-subtasks-section {
+    margin-bottom: 1rem;
+}
+
+.subtasks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.subtask-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-hover);
+    border-radius: var(--radius-md);
+    transition: all var(--transition);
+}
+
+.subtask-item:hover {
+    background: var(--bg-input);
+}
+
+.subtask-item.completed {
+    opacity: 0.6;
+}
+
+.subtask-item.completed .subtask-text {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.subtask-checkbox {
+    flex-shrink: 0;
+}
+
+.subtask-checkbox input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+.subtask-text {
+    flex: 1;
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+    word-break: break-word;
+}
+
+.subtask-delete {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    opacity: 0;
+    transition: all var(--transition);
+}
+
+.subtask-item:hover .subtask-delete {
+    opacity: 1;
+}
+
+.subtask-delete:hover {
+    color: var(--danger);
+}
+
+.subtask-delete svg {
+    width: 14px;
+    height: 14px;
+}
+
+.subtask-add {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.subtask-input {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 0.75rem;
+    font-family: inherit;
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    transition: border-color var(--transition);
+}
+
+.subtask-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.subtask-input::placeholder {
+    color: var(--text-muted);
+}
+
+.subtask-add-btn {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.subtask-add-btn:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+}
+
+.subtask-add-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.subtask-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.subtask-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-hover);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.subtask-progress-fill {
+    height: 100%;
+    background: var(--success);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.subtask-progress-text {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* Task item subtask indicator */
+.task-subtasks-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    margin-left: 0.5rem;
+}
+
+.task-subtasks-indicator svg {
+    width: 12px;
+    height: 12px;
+}
+
+.task-subtasks-indicator.has-completed {
+    color: var(--success);
+}
+
 .modal-input {
     width: 100%;
     border: 1px solid var(--border);

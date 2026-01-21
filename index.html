@@ -309,8 +309,28 @@
                     <label class="modal-label">Notes</label>
                     <textarea class="modal-notes" id="modal-notes" placeholder="Add additional details..." rows="4"></textarea>
                 </div>
+
+                <div class="modal-subtasks-section">
+                    <label class="modal-label">Subtasks</label>
+                    <div class="subtasks-list" id="subtasks-list"></div>
+                    <div class="subtask-add">
+                        <input type="text" id="subtask-input" class="subtask-input" placeholder="Add a subtask...">
+                        <button type="button" class="subtask-add-btn" id="subtask-add-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="subtask-progress" id="subtask-progress" style="display: none;">
+                        <div class="subtask-progress-bar">
+                            <div class="subtask-progress-fill" id="subtask-progress-fill"></div>
+                        </div>
+                        <span class="subtask-progress-text" id="subtask-progress-text">0/0</span>
+                    </div>
+                </div>
             </div>
-            
+
             <div class="modal-actions">
                 <button class="modal-btn modal-btn-delete" id="modal-delete">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
