@@ -370,6 +370,9 @@ class TaskManager {
             // Apply saved list order
             this.applyListOrder();
 
+            // Sync to localStorage as backup for offline/app restart
+            this.saveToLocalStorage();
+
             this.currentListId = Number(this.lists[0]?.id);
             this.updateTitle();
             this.renderTabs();
@@ -921,6 +924,8 @@ class TaskManager {
                     }
                     if (!Array.isArray(this.tasks)) this.tasks = [];
                     this.tasks.unshift(created);
+                    // Always sync to localStorage as backup
+                    this.saveToLocalStorage();
                 } else {
                     const errorData = await res.json().catch(() => ({}));
                     console.error('Failed to create task:', res.status, errorData);
@@ -970,6 +975,8 @@ class TaskManager {
             updated.completed = !!updated.completed;
             const idx = this.tasks.findIndex(t => String(t.id) === String(id));
             if (idx !== -1) this.tasks[idx] = updated;
+            // Always sync to localStorage as backup
+            this.saveToLocalStorage();
         } else {
             const task = this.tasks.find(t => String(t.id) === String(id));
             if (task) {
@@ -999,7 +1006,8 @@ class TaskManager {
             });
         }
         this.tasks = this.tasks.filter(t => String(t.id) !== String(id));
-        if (!this.isOnline) this.saveToLocalStorage();
+        // Always sync to localStorage as backup
+        this.saveToLocalStorage();
 
         if (showUndo) {
             this.showUndoToast('Task deleted');
