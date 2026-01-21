@@ -2110,6 +2110,7 @@ class TaskManager {
 
     async loadSubtasks(taskId) {
         this.subtaskInput.value = '';
+        let loadedFromApi = false;
 
         if (this.isOnline) {
             try {
@@ -2119,14 +2120,17 @@ class TaskManager {
                 if (res.ok) {
                     const subtasks = await res.json();
                     this.subtasks[taskId] = subtasks;
+                    // Sync to localStorage as backup
+                    localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(subtasks));
+                    loadedFromApi = true;
                 }
             } catch (e) {
-                console.error('Failed to load subtasks:', e);
+                console.error('Failed to load subtasks from API:', e);
             }
         }
 
-        // Load from local storage for offline mode
-        if (!this.subtasks[taskId]) {
+        // Load from localStorage if API failed or offline
+        if (!loadedFromApi) {
             const stored = localStorage.getItem(`subtasks_${taskId}`);
             this.subtasks[taskId] = stored ? JSON.parse(stored) : [];
         }
@@ -2189,6 +2193,16 @@ class TaskManager {
         if (!text || !this.currentTaskId) return;
 
         const taskId = this.currentTaskId;
+        let savedToApi = false;
+
+        // Create subtask object
+        const subtask = {
+            id: this.generateId(),
+            task_id: taskId,
+            text,
+            completed: false,
+            sort_order: (this.subtasks[taskId]?.length || 0)
+        };
 
         if (this.isOnline) {
             try {
@@ -2198,26 +2212,19 @@ class TaskManager {
                     body: JSON.stringify({ task_id: taskId, text })
                 });
                 if (res.ok) {
-                    const subtask = await res.json();
-                    if (!this.subtasks[taskId]) this.subtasks[taskId] = [];
-                    this.subtasks[taskId].push(subtask);
+                    const apiSubtask = await res.json();
+                    subtask.id = apiSubtask.id; // Use the API-generated ID
+                    savedToApi = true;
                 }
             } catch (e) {
-                console.error('Failed to add subtask:', e);
+                console.error('Failed to add subtask to API:', e);
             }
-        } else {
-            // Offline mode
-            const subtask = {
-                id: this.generateId(),
-                task_id: taskId,
-                text,
-                completed: false,
-                sort_order: (this.subtasks[taskId]?.length || 0)
-            };
-            if (!this.subtasks[taskId]) this.subtasks[taskId] = [];
-            this.subtasks[taskId].push(subtask);
-            localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
         }
+
+        // Always add to local state and localStorage
+        if (!this.subtasks[taskId]) this.subtasks[taskId] = [];
+        this.subtasks[taskId].push(subtask);
+        localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
 
         this.subtaskInput.value = '';
         this.renderSubtasks();
@@ -2243,9 +2250,10 @@ class TaskManager {
             } catch (e) {
                 console.error('Failed to toggle subtask:', e);
             }
-        } else {
-            localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
         }
+
+        // Always save to localStorage as backup
+        localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
 
         this.renderSubtasks();
         this.render(); // Update task list to show subtask progress
@@ -2267,9 +2275,8 @@ class TaskManager {
 
         this.subtasks[taskId] = (this.subtasks[taskId] || []).filter(st => String(st.id) !== String(subtaskId));
 
-        if (!this.isOnline) {
-            localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
-        }
+        // Always save to localStorage as backup
+        localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
 
         this.renderSubtasks();
         this.render(); // Update task list
