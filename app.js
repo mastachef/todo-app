@@ -922,8 +922,11 @@ class TaskManager {
                         created.list_id = Number(created.list_id);
                     }
                     this.tasks.unshift(created);
+                    console.log('Task saved to DB:', created.id);
                 } else {
-                    console.error('Failed to create task:', res.status);
+                    const errText = await res.text();
+                    console.error('Failed to create task:', res.status, errText);
+                    alert('Failed to save task: ' + res.status + ' - ' + errText);
                     if (res.status === 401) {
                         this.saveAuthToken(null);
                         this.isOnline = false;
@@ -936,12 +939,15 @@ class TaskManager {
                 }
             } catch (e) {
                 console.error('Error creating task:', e);
+                alert('Error saving task: ' + e.message);
                 this.isOnline = false;
                 task.id = this.generateId();
                 this.tasks.unshift(task);
                 this.saveToLocalStorage();
             }
         } else {
+            console.log('Offline mode - saving locally');
+            alert('Saving locally (offline mode)');
             task.id = this.generateId();
             this.tasks.unshift(task);
             this.saveToLocalStorage();
