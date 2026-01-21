@@ -1095,23 +1095,38 @@ class TaskManager {
     
     updateNotificationButtonState() {
         if (!this.enableNotificationsBtn) return;
-        
+
         if (!('Notification' in window) || !('PushManager' in window)) {
             this.notificationsBtnText.textContent = 'Notifications not supported';
             this.enableNotificationsBtn.disabled = true;
             this.enableNotificationsBtn.style.opacity = '0.5';
             return;
         }
-        
-        if (Notification.permission === 'granted') {
-            this.notificationsBtnText.textContent = 'Notifications Enabled ✓';
-            this.enableNotificationsBtn.style.opacity = '0.7';
-        } else if (Notification.permission === 'denied') {
+
+        const notificationsMuted = localStorage.getItem('taskManager_notificationsMuted') === 'true';
+
+        if (Notification.permission === 'denied') {
             this.notificationsBtnText.textContent = 'Notifications Blocked';
             this.enableNotificationsBtn.style.opacity = '0.5';
+            this.enableNotificationsBtn.disabled = true;
+        } else if (Notification.permission === 'granted' && !notificationsMuted) {
+            this.notificationsBtnText.textContent = 'Disable Notifications';
+            this.enableNotificationsBtn.style.opacity = '1';
+            this.enableNotificationsBtn.disabled = false;
+        } else if (Notification.permission === 'granted' && notificationsMuted) {
+            this.notificationsBtnText.textContent = 'Enable Notifications';
+            this.enableNotificationsBtn.style.opacity = '1';
+            this.enableNotificationsBtn.disabled = false;
         } else {
             this.notificationsBtnText.textContent = 'Enable Notifications';
+            this.enableNotificationsBtn.style.opacity = '1';
+            this.enableNotificationsBtn.disabled = false;
         }
+    }
+
+    areNotificationsEnabled() {
+        if (Notification.permission !== 'granted') return false;
+        return localStorage.getItem('taskManager_notificationsMuted') !== 'true';
     }
     
     async requestNotificationPermission() {
@@ -1119,32 +1134,57 @@ class TaskManager {
             alert('This browser does not support notifications');
             return;
         }
-        
+
         if (!('PushManager' in window)) {
             alert('Push notifications are not supported in this browser');
             return;
         }
-        
+
+        // If already granted, toggle mute state
+        if (Notification.permission === 'granted') {
+            const currentlyMuted = localStorage.getItem('taskManager_notificationsMuted') === 'true';
+            if (currentlyMuted) {
+                // Re-enable notifications
+                localStorage.removeItem('taskManager_notificationsMuted');
+                this.updateNotificationButtonState();
+
+                if (this.swRegistration) {
+                    this.swRegistration.showNotification('Notifications Re-enabled', {
+                        body: 'You will receive reminders for your tasks.',
+                        icon: '/icons/icon-192.svg',
+                        badge: '/icons/icon-96.svg'
+                    });
+                }
+            } else {
+                // Disable (mute) notifications
+                localStorage.setItem('taskManager_notificationsMuted', 'true');
+                this.updateNotificationButtonState();
+            }
+            return;
+        }
+
         // Check if running as PWA on iOS
         const isIOSPWA = window.navigator.standalone === true;
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        
+
         if (isIOS && !isIOSPWA) {
             alert('For notifications on iOS, please add this app to your Home Screen first:\n\n1. Tap the Share button\n2. Select "Add to Home Screen"\n3. Then enable notifications from the app');
             return;
         }
-        
+
         try {
             const permission = await Notification.requestPermission();
             console.log('Notification permission:', permission);
-            
+
             if (permission === 'granted') {
+                // Make sure muted state is cleared when first enabling
+                localStorage.removeItem('taskManager_notificationsMuted');
                 await this.subscribeToPush();
                 this.updateNotificationButtonState();
-                
+
                 // Show test notification
                 if (this.swRegistration) {
-                    this.swRegistration.showNotification('Notifications Enabled! 🎉', {
+                    this.swRegistration.showNotification('Notifications Enabled!', {
                         body: 'You will now receive reminders for your tasks.',
                         icon: '/icons/icon-192.svg',
                         badge: '/icons/icon-96.svg'
@@ -1153,7 +1193,7 @@ class TaskManager {
             } else if (permission === 'denied') {
                 alert('Notifications were blocked. You can enable them in your browser settings.');
             }
-            
+
             this.updateNotificationButtonState();
         } catch (e) {
             console.error('Error requesting notification permission:', e);
@@ -1294,6 +1334,12 @@ class TaskManager {
         
         if (Notification.permission !== 'granted') {
             console.log('[Reminders] Notification permission not granted:', Notification.permission);
+            return;
+        }
+
+        // Check if notifications are muted by user
+        if (!this.areNotificationsEnabled()) {
+            console.log('[Reminders] Notifications are muted by user');
             return;
         }
         
