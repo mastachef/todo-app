@@ -53,7 +53,7 @@ export async function handler(event) {
         return errorResponse(404, 'Task not found');
       }
 
-      const { text, notes, priority, completed, reminder_time, reminder_repeat } = parseBody(event);
+      const { text, notes, priority, completed, reminder_time, reminder_repeat, recurrence, is_focused } = parseBody(event);
 
       // Calculate completed_at
       let completedAt = existingTask.completed_at;
@@ -64,10 +64,10 @@ export async function handler(event) {
       }
 
       const updatedTask = await db.queryOne(
-        `UPDATE tasks 
+        `UPDATE tasks
          SET text = $1, notes = $2, priority = $3, completed = $4, completed_at = $5,
-             reminder_time = $6, reminder_repeat = $7
-         WHERE id = $8 AND user_id = $9
+             reminder_time = $6, reminder_repeat = $7, recurrence = $8, is_focused = $9
+         WHERE id = $10 AND user_id = $11
          RETURNING *`,
         [
           text ?? existingTask.text,
@@ -77,6 +77,8 @@ export async function handler(event) {
           completedAt,
           reminder_time !== undefined ? reminder_time : existingTask.reminder_time,
           reminder_repeat !== undefined ? reminder_repeat : existingTask.reminder_repeat,
+          recurrence !== undefined ? recurrence : existingTask.recurrence,
+          is_focused !== undefined ? is_focused : existingTask.is_focused,
           taskId,
           userId
         ]

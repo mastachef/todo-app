@@ -30,7 +30,7 @@ export async function handler(event) {
 
     // POST - Create new task
     if (event.httpMethod === 'POST') {
-      const { list_id, text, notes, priority, reminder_time, reminder_repeat } = parseBody(event);
+      const { list_id, text, notes, priority, reminder_time, reminder_repeat, recurrence } = parseBody(event);
       
       if (!text) {
         return errorResponse(400, 'Task text required');
@@ -51,10 +51,10 @@ export async function handler(event) {
       }
 
       const task = await db.queryOne(
-        `INSERT INTO tasks (list_id, user_id, text, notes, priority, reminder_time, reminder_repeat)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO tasks (list_id, user_id, text, notes, priority, reminder_time, reminder_repeat, recurrence)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING *`,
-        [list_id, userId, text, notes || '', priority || 'none', reminder_time || null, reminder_repeat || null]
+        [list_id, userId, text, notes || '', priority || 'none', reminder_time || null, reminder_repeat || null, recurrence || null]
       );
 
       return jsonResponse(200, task);

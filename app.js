@@ -11,7 +11,21 @@ class TaskManager {
         this.currentSort = 'newest';
         this.editingListId = null;
         this.authToken = null;
-        
+
+        // Undo functionality
+        this.undoStack = [];
+
+        // Bulk selection mode
+        this.selectionMode = false;
+        this.selectedTasks = new Set();
+
+        // Focus mode & timer
+        this.focusModeActive = false;
+        this.timerInterval = null;
+        this.timerSeconds = 25 * 60;
+        this.timerRunning = false;
+        this.isBreakTime = false;
+
         // Use Netlify Functions
         this.API_BASE = '/.netlify/functions';
         
@@ -77,6 +91,7 @@ class TaskManager {
         this.modalSave = document.getElementById('modal-save');
         this.reminderTime = document.getElementById('reminder-time');
         this.reminderRepeat = document.getElementById('reminder-repeat');
+        this.recurrenceSelect = document.getElementById('recurrence-select');
         this.clearReminder = document.getElementById('clear-reminder');
         
         // List Modal
@@ -86,6 +101,35 @@ class TaskManager {
         this.listNameInput = document.getElementById('list-name-input');
         this.listDelete = document.getElementById('list-delete');
         this.listSave = document.getElementById('list-save');
+
+        // Bulk Selection
+        this.bulkSelectBtn = document.getElementById('bulk-select-btn');
+        this.bulkActionBar = document.getElementById('bulk-action-bar');
+        this.bulkCancelBtn = document.getElementById('bulk-cancel-btn');
+        this.bulkCount = document.getElementById('bulk-count');
+        this.bulkCompleteBtn = document.getElementById('bulk-complete-btn');
+        this.bulkMoveBtn = document.getElementById('bulk-move-btn');
+        this.bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+        this.bulkMoveModal = document.getElementById('bulk-move-modal');
+        this.bulkMoveModalClose = document.getElementById('bulk-move-modal-close');
+        this.bulkMoveList = document.getElementById('bulk-move-list');
+
+        // Focus Mode
+        this.focusModeBtn = document.getElementById('focus-mode-btn');
+        this.focusOverlay = document.getElementById('focus-overlay');
+        this.focusClose = document.getElementById('focus-close');
+        this.focusTasksList = document.getElementById('focus-tasks-list');
+        this.focusEmpty = document.getElementById('focus-empty');
+        this.focusToggle = document.getElementById('focus-toggle');
+
+        // Timer
+        this.timerDisplay = document.getElementById('timer-display');
+        this.timerLabel = document.getElementById('timer-label');
+        this.timerStart = document.getElementById('timer-start');
+        this.timerPause = document.getElementById('timer-pause');
+        this.timerReset = document.getElementById('timer-reset');
+        this.workDuration = document.getElementById('work-duration');
+        this.breakDuration = document.getElementById('break-duration');
     }
     
     async init() {
@@ -481,6 +525,9 @@ class TaskManager {
                 this.closeTaskModal();
                 this.closeListModal();
                 this.closeSearchModal();
+                this.closeBulkMoveModal();
+                if (this.selectionMode) this.exitSelectionMode();
+                if (this.focusModeActive) this.closeFocusMode();
             }
         });
 
@@ -492,6 +539,29 @@ class TaskManager {
         });
         this.searchInput.addEventListener('input', () => this.handleSearchInput());
         this.searchClear.addEventListener('click', () => this.clearSearch());
+
+        // Bulk Selection
+        this.bulkSelectBtn.addEventListener('click', () => this.toggleSelectionMode());
+        this.bulkCancelBtn.addEventListener('click', () => this.exitSelectionMode());
+        this.bulkCompleteBtn.addEventListener('click', () => this.bulkCompleteTasks());
+        this.bulkMoveBtn.addEventListener('click', () => this.openBulkMoveModal());
+        this.bulkDeleteBtn.addEventListener('click', () => this.bulkDeleteTasks());
+        this.bulkMoveModalClose.addEventListener('click', () => this.closeBulkMoveModal());
+        this.bulkMoveModal.addEventListener('click', (e) => {
+            if (e.target === this.bulkMoveModal) this.closeBulkMoveModal();
+        });
+
+        // Focus Mode
+        this.focusModeBtn.addEventListener('click', () => this.openFocusMode());
+        this.focusClose.addEventListener('click', () => this.closeFocusMode());
+        this.focusToggle.addEventListener('click', () => this.toggleCurrentTaskFocus());
+
+        // Timer
+        this.timerStart.addEventListener('click', () => this.startTimer());
+        this.timerPause.addEventListener('click', () => this.pauseTimer());
+        this.timerReset.addEventListener('click', () => this.resetTimer());
+        this.workDuration.addEventListener('change', () => this.updateTimerSettings());
+        this.breakDuration.addEventListener('change', () => this.updateTimerSettings());
     }
     
     // ============ LISTS ============
@@ -877,7 +947,14 @@ class TaskManager {
         }
     }
     
-    async deleteTask(id) {
+    async deleteTask(id, showUndo = true) {
+        const task = this.tasks.find(t => String(t.id) === String(id));
+
+        // Store for undo before deleting
+        if (task && showUndo) {
+            this.storeForUndo('delete', { ...task });
+        }
+
         if (this.isOnline) {
             await fetch(`${this.API_BASE}/api-tasks-id/${id}`, {
                 method: 'DELETE',
@@ -886,14 +963,62 @@ class TaskManager {
         }
         this.tasks = this.tasks.filter(t => String(t.id) !== String(id));
         if (!this.isOnline) this.saveToLocalStorage();
+
+        if (showUndo) {
+            this.showUndoToast('Task deleted');
+        }
     }
     
     async toggleTask(id) {
         // Handle both string and number IDs
         const task = this.tasks.find(t => String(t.id) === String(id));
         if (task) {
+            const wasCompleted = task.completed;
             await this.updateTask(task.id, { completed: !task.completed });
+
+            // Handle recurring tasks - create new task when completing
+            if (!wasCompleted && task.recurrence) {
+                await this.createRecurringTask(task);
+            }
+
             this.render();
+        }
+    }
+
+    async createRecurringTask(originalTask) {
+        const newTask = {
+            list_id: originalTask.list_id,
+            text: originalTask.text,
+            notes: originalTask.notes || '',
+            priority: originalTask.priority || 'none',
+            recurrence: originalTask.recurrence,
+            reminder_time: null,
+            reminder_repeat: null
+        };
+
+        if (this.isOnline) {
+            try {
+                const res = await fetch(`${this.API_BASE}/api-tasks`, {
+                    method: 'POST',
+                    headers: this.getAuthHeaders(),
+                    body: JSON.stringify(newTask)
+                });
+                if (res.ok) {
+                    const created = await res.json();
+                    created.completed = false;
+                    created.list_id = Number(created.list_id);
+                    this.tasks.unshift(created);
+                }
+            } catch (e) {
+                console.error('Failed to create recurring task:', e);
+            }
+        } else {
+            newTask.id = this.generateId();
+            newTask.completed = false;
+            newTask.created_at = new Date().toISOString();
+            newTask.completed_at = null;
+            this.tasks.unshift(newTask);
+            this.saveToLocalStorage();
         }
     }
     
@@ -924,7 +1049,11 @@ class TaskManager {
             this.reminderTime.value = '';
         }
         this.reminderRepeat.value = task.reminder_repeat || '';
-        
+        this.recurrenceSelect.value = task.recurrence || '';
+
+        // Focus toggle
+        this.updateFocusToggleUI(task.is_focused);
+
         // Meta
         this.modalMeta.innerHTML = `
             <div class="modal-meta-item">
@@ -955,15 +1084,16 @@ class TaskManager {
     
     async saveTaskChanges() {
         if (!this.currentTaskId) return;
-        
+
         await this.updateTask(this.currentTaskId, {
             text: this.modalTaskText.value.trim(),
             notes: this.modalNotes.value.trim(),
             priority: this.currentPriority,
             reminder_time: this.reminderTime.value ? new Date(this.reminderTime.value).toISOString() : null,
-            reminder_repeat: this.reminderRepeat.value || null
+            reminder_repeat: this.reminderRepeat.value || null,
+            recurrence: this.recurrenceSelect.value || null
         });
-        
+
         this.render();
         this.closeTaskModal();
     }
@@ -1042,7 +1172,15 @@ class TaskManager {
         const notesPreview = hasNotes ? task.notes.trim().substring(0, 60) + (task.notes.length > 60 ? '...' : '') : '';
         const priority = task.priority || 'none';
         const hasReminder = task.reminder_time;
-        
+        const hasRecurrence = task.recurrence;
+
+        const recurrenceLabels = {
+            'daily': 'Daily',
+            'weekly': 'Weekly',
+            'monthly': 'Monthly',
+            'yearly': 'Yearly'
+        };
+
         const priorityFlag = priority !== 'none' ? `
             <span class="task-priority-flag" data-priority="${priority}">
                 <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
@@ -1052,8 +1190,15 @@ class TaskManager {
             </span>
         ` : '';
         
+        const isSelected = this.selectedTasks.has(String(task.id));
+        const selectionModeClass = this.selectionMode ? 'selection-mode' : '';
+        const selectedClass = isSelected ? 'selected' : '';
+
         return `
-            <li class="task-item ${task.completed ? 'completed' : ''}" data-id="${task.id}">
+            <li class="task-item ${task.completed ? 'completed' : ''} ${selectionModeClass} ${selectedClass}" data-id="${task.id}">
+                <label class="task-selection-checkbox" onclick="event.stopPropagation()">
+                    <input type="checkbox" ${isSelected ? 'checked' : ''}>
+                </label>
                 <label class="task-checkbox" onclick="event.stopPropagation()">
                     <input type="checkbox" ${task.completed ? 'checked' : ''}>
                     <span class="checkmark">
@@ -1061,9 +1206,10 @@ class TaskManager {
                     </span>
                 </label>
                 <button type="button" class="task-content" onclick="window.taskManager.openTaskModal('${task.id}')">
-                    <p class="task-text">${this.escapeHTML(task.text)}</p>
+                    <p class="task-text">${this.escapeHTML(task.text)}${task.is_focused ? `<span class="task-focused-indicator"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}</p>
                     ${hasNotes ? `<p class="task-notes-preview">${this.escapeHTML(notesPreview)}</p>` : ''}
                     ${hasReminder ? `<span class="task-reminder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Reminder set</span>` : ''}
+                    ${hasRecurrence ? `<span class="task-recurrence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H4.2"/></svg> ${recurrenceLabels[task.recurrence] || task.recurrence}</span>` : ''}
                 </button>
                 ${priorityFlag}
             </li>
@@ -1071,6 +1217,7 @@ class TaskManager {
     }
     
     bindTaskEvents() {
+        // Regular task completion checkbox
         document.querySelectorAll('.task-checkbox input').forEach(cb => {
             cb.addEventListener('change', (e) => {
                 e.stopPropagation();
@@ -1078,6 +1225,28 @@ class TaskManager {
                 this.toggleTask(id);
             });
         });
+
+        // Selection mode checkbox
+        document.querySelectorAll('.task-selection-checkbox input').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const id = e.target.closest('.task-item').dataset.id;
+                this.toggleTaskSelection(id);
+            });
+        });
+
+        // In selection mode, clicking anywhere on the task toggles selection
+        if (this.selectionMode) {
+            document.querySelectorAll('.task-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    // Don't toggle if clicking the content button (to open modal)
+                    if (!e.target.closest('.task-content') && !e.target.closest('.task-checkbox')) {
+                        const id = item.dataset.id;
+                        this.toggleTaskSelection(id);
+                    }
+                });
+            });
+        }
     }
     
     // ============ SERVICE WORKER & PUSH NOTIFICATIONS ============
@@ -1644,6 +1813,482 @@ class TaskManager {
         this.searchClear.style.display = 'none';
         this.searchResultsHeader.style.display = 'none';
         this.searchResultsList.innerHTML = '<li class="search-empty">Type to search tasks...</li>';
+    }
+
+    // ============ UNDO FUNCTIONALITY ============
+
+    storeForUndo(action, data) {
+        this.undoStack.push({
+            action,
+            data,
+            timestamp: Date.now()
+        });
+        // Keep only last 10 actions
+        if (this.undoStack.length > 10) this.undoStack.shift();
+    }
+
+    showUndoToast(message) {
+        const container = document.getElementById('toast-container');
+        const toastId = 'toast-' + Date.now();
+
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.id = toastId;
+        toast.innerHTML = `
+            <span class="toast-message">${message}</span>
+            <button class="toast-undo" onclick="window.taskManager.undoLastAction('${toastId}')">Undo</button>
+            <button class="toast-dismiss" onclick="window.taskManager.dismissToast('${toastId}')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        `;
+        container.appendChild(toast);
+
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => this.dismissToast(toastId), 5000);
+    }
+
+    dismissToast(toastId) {
+        const toast = document.getElementById(toastId);
+        if (toast) {
+            toast.style.animation = 'slideOutRight 0.3s ease forwards';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }
+
+    async undoLastAction(toastId) {
+        const lastAction = this.undoStack.pop();
+        if (!lastAction) return;
+
+        this.dismissToast(toastId);
+
+        switch (lastAction.action) {
+            case 'delete':
+                await this.restoreTask(lastAction.data);
+                break;
+            case 'bulk-delete':
+                for (const task of lastAction.data) {
+                    await this.restoreTask(task);
+                }
+                break;
+            case 'complete':
+                await this.updateTask(lastAction.data.id, { completed: false });
+                break;
+            case 'bulk-complete':
+                for (const task of lastAction.data) {
+                    await this.updateTask(task.id, { completed: false });
+                }
+                break;
+        }
+        this.render();
+    }
+
+    async restoreTask(task) {
+        if (this.isOnline) {
+            try {
+                const res = await fetch(`${this.API_BASE}/api-tasks`, {
+                    method: 'POST',
+                    headers: this.getAuthHeaders(),
+                    body: JSON.stringify({
+                        list_id: task.list_id,
+                        text: task.text,
+                        notes: task.notes || '',
+                        priority: task.priority || 'none',
+                        reminder_time: task.reminder_time,
+                        reminder_repeat: task.reminder_repeat
+                    })
+                });
+                if (res.ok) {
+                    const restored = await res.json();
+                    restored.completed = !!restored.completed;
+                    this.tasks.unshift(restored);
+                }
+            } catch (e) {
+                console.error('Failed to restore task:', e);
+            }
+        } else {
+            // Restore locally with a new ID
+            const restoredTask = { ...task, id: this.generateId() };
+            this.tasks.unshift(restoredTask);
+            this.saveToLocalStorage();
+        }
+    }
+
+    // ============ BULK SELECTION MODE ============
+
+    toggleSelectionMode() {
+        this.selectionMode = !this.selectionMode;
+        if (this.selectionMode) {
+            this.enterSelectionMode();
+        } else {
+            this.exitSelectionMode();
+        }
+    }
+
+    enterSelectionMode() {
+        this.selectionMode = true;
+        this.selectedTasks.clear();
+        this.bulkSelectBtn.classList.add('active');
+        this.bulkActionBar.style.display = 'flex';
+        document.querySelectorAll('.task-item').forEach(item => {
+            item.classList.add('selection-mode');
+        });
+        this.updateBulkCount();
+        this.render();
+    }
+
+    exitSelectionMode() {
+        this.selectionMode = false;
+        this.selectedTasks.clear();
+        this.bulkSelectBtn.classList.remove('active');
+        this.bulkActionBar.style.display = 'none';
+        document.querySelectorAll('.task-item').forEach(item => {
+            item.classList.remove('selection-mode', 'selected');
+        });
+        this.render();
+    }
+
+    toggleTaskSelection(id) {
+        const taskId = String(id);
+        if (this.selectedTasks.has(taskId)) {
+            this.selectedTasks.delete(taskId);
+        } else {
+            this.selectedTasks.add(taskId);
+        }
+        this.updateBulkCount();
+        this.updateTaskSelectionUI(taskId);
+    }
+
+    updateTaskSelectionUI(id) {
+        const taskElement = document.querySelector(`.task-item[data-id="${id}"]`);
+        if (taskElement) {
+            const checkbox = taskElement.querySelector('.task-selection-checkbox input');
+            if (this.selectedTasks.has(String(id))) {
+                taskElement.classList.add('selected');
+                if (checkbox) checkbox.checked = true;
+            } else {
+                taskElement.classList.remove('selected');
+                if (checkbox) checkbox.checked = false;
+            }
+        }
+    }
+
+    updateBulkCount() {
+        const count = this.selectedTasks.size;
+        this.bulkCount.textContent = `${count} selected`;
+
+        // Disable action buttons if nothing selected
+        const hasSelection = count > 0;
+        this.bulkCompleteBtn.disabled = !hasSelection;
+        this.bulkMoveBtn.disabled = !hasSelection;
+        this.bulkDeleteBtn.disabled = !hasSelection;
+    }
+
+    async bulkCompleteTasks() {
+        if (this.selectedTasks.size === 0) return;
+
+        const tasksToComplete = this.tasks.filter(t =>
+            this.selectedTasks.has(String(t.id)) && !t.completed
+        );
+
+        // Store for undo
+        this.storeForUndo('bulk-complete', tasksToComplete.map(t => ({ ...t })));
+
+        // Complete each task
+        for (const task of tasksToComplete) {
+            await this.updateTask(task.id, { completed: true });
+
+            // Handle recurring tasks
+            if (task.recurrence) {
+                await this.createRecurringTask(task);
+            }
+        }
+
+        this.showUndoToast(`Completed ${tasksToComplete.length} task${tasksToComplete.length > 1 ? 's' : ''}`);
+        this.exitSelectionMode();
+    }
+
+    openBulkMoveModal() {
+        if (this.selectedTasks.size === 0) return;
+
+        // Populate the list of available lists
+        this.bulkMoveList.innerHTML = this.lists.map(list => `
+            <button class="bulk-move-item" data-list-id="${list.id}">${this.escapeHTML(list.name)}</button>
+        `).join('');
+
+        // Bind click events
+        this.bulkMoveList.querySelectorAll('.bulk-move-item').forEach(item => {
+            item.addEventListener('click', () => {
+                this.bulkMoveTasks(item.dataset.listId);
+            });
+        });
+
+        this.bulkMoveModal.style.display = 'flex';
+    }
+
+    closeBulkMoveModal() {
+        this.bulkMoveModal.style.display = 'none';
+    }
+
+    async bulkMoveTasks(newListId) {
+        if (this.selectedTasks.size === 0) return;
+
+        const tasksToMove = this.tasks.filter(t => this.selectedTasks.has(String(t.id)));
+        const count = tasksToMove.length;
+
+        for (const task of tasksToMove) {
+            await this.updateTask(task.id, { list_id: Number(newListId) });
+        }
+
+        const targetList = this.lists.find(l => String(l.id) === String(newListId));
+        const listName = targetList ? targetList.name : 'list';
+
+        this.showUndoToast(`Moved ${count} task${count > 1 ? 's' : ''} to ${listName}`);
+        this.closeBulkMoveModal();
+        this.exitSelectionMode();
+    }
+
+    async bulkDeleteTasks() {
+        if (this.selectedTasks.size === 0) return;
+
+        const tasksToDelete = this.tasks.filter(t => this.selectedTasks.has(String(t.id)));
+        const count = tasksToDelete.length;
+
+        // Store for undo
+        this.storeForUndo('bulk-delete', tasksToDelete.map(t => ({ ...t })));
+
+        // Delete each task
+        for (const task of tasksToDelete) {
+            if (this.isOnline) {
+                try {
+                    await fetch(`${this.API_BASE}/api-tasks-id/${task.id}`, {
+                        method: 'DELETE',
+                        headers: this.getAuthHeaders()
+                    });
+                } catch (e) {
+                    console.error('Failed to delete task:', e);
+                }
+            }
+            this.tasks = this.tasks.filter(t => String(t.id) !== String(task.id));
+        }
+
+        if (!this.isOnline) this.saveToLocalStorage();
+
+        this.showUndoToast(`Deleted ${count} task${count > 1 ? 's' : ''}`);
+        this.exitSelectionMode();
+    }
+
+    // ============ FOCUS MODE ============
+
+    openFocusMode() {
+        this.focusModeActive = true;
+        this.focusOverlay.style.display = 'block';
+        this.focusModeBtn.classList.add('active');
+        this.renderFocusTasks();
+        document.body.style.overflow = 'hidden';
+    }
+
+    closeFocusMode() {
+        this.focusModeActive = false;
+        this.focusOverlay.style.display = 'none';
+        this.focusModeBtn.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+
+    renderFocusTasks() {
+        const focusedTasks = this.tasks.filter(t => t.is_focused && !t.completed);
+        const completedFocused = this.tasks.filter(t => t.is_focused && t.completed);
+
+        if (focusedTasks.length === 0 && completedFocused.length === 0) {
+            this.focusTasksList.innerHTML = '';
+            this.focusEmpty.style.display = 'block';
+            return;
+        }
+
+        this.focusEmpty.style.display = 'none';
+
+        const allFocused = [...focusedTasks, ...completedFocused];
+        this.focusTasksList.innerHTML = allFocused.map(task => `
+            <li class="focus-task-item ${task.completed ? 'completed' : ''}" data-id="${task.id}">
+                <label class="focus-task-checkbox">
+                    <input type="checkbox" ${task.completed ? 'checked' : ''}>
+                </label>
+                <span class="focus-task-text">${this.escapeHTML(task.text)}</span>
+                <button class="focus-task-unfocus" title="Remove from focus">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                </button>
+            </li>
+        `).join('');
+
+        // Bind events
+        this.focusTasksList.querySelectorAll('.focus-task-checkbox input').forEach(cb => {
+            cb.addEventListener('change', async (e) => {
+                const id = e.target.closest('.focus-task-item').dataset.id;
+                await this.toggleTask(id);
+                this.renderFocusTasks();
+            });
+        });
+
+        this.focusTasksList.querySelectorAll('.focus-task-unfocus').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const id = e.target.closest('.focus-task-item').dataset.id;
+                await this.setTaskFocus(id, false);
+                this.renderFocusTasks();
+            });
+        });
+    }
+
+    async toggleCurrentTaskFocus() {
+        if (!this.currentTaskId) return;
+
+        const task = this.tasks.find(t => String(t.id) === String(this.currentTaskId));
+        if (task) {
+            const newFocused = !task.is_focused;
+            await this.setTaskFocus(this.currentTaskId, newFocused);
+            this.updateFocusToggleUI(newFocused);
+        }
+    }
+
+    async setTaskFocus(id, isFocused) {
+        const task = this.tasks.find(t => String(t.id) === String(id));
+        if (!task) return;
+
+        task.is_focused = isFocused;
+
+        if (this.isOnline) {
+            try {
+                await fetch(`${this.API_BASE}/api-tasks-id/${id}`, {
+                    method: 'PUT',
+                    headers: this.getAuthHeaders(),
+                    body: JSON.stringify({ is_focused: isFocused })
+                });
+            } catch (e) {
+                console.error('Failed to update task focus:', e);
+            }
+        } else {
+            this.saveToLocalStorage();
+        }
+
+        this.render();
+    }
+
+    updateFocusToggleUI(isFocused) {
+        if (isFocused) {
+            this.focusToggle.classList.add('active');
+            this.focusToggle.title = 'Remove from focus list';
+        } else {
+            this.focusToggle.classList.remove('active');
+            this.focusToggle.title = 'Add to focus list';
+        }
+    }
+
+    // ============ POMODORO TIMER ============
+
+    startTimer() {
+        if (this.timerRunning) return;
+
+        this.timerRunning = true;
+        this.timerStart.style.display = 'none';
+        this.timerPause.style.display = 'inline-flex';
+
+        this.timerInterval = setInterval(() => {
+            this.timerSeconds--;
+
+            if (this.timerSeconds <= 0) {
+                this.onTimerComplete();
+            } else {
+                this.updateTimerDisplay();
+            }
+        }, 1000);
+    }
+
+    pauseTimer() {
+        this.timerRunning = false;
+        this.timerStart.style.display = 'inline-flex';
+        this.timerPause.style.display = 'none';
+
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+    }
+
+    resetTimer() {
+        this.pauseTimer();
+        this.isBreakTime = false;
+        this.timerSeconds = parseInt(this.workDuration.value) * 60;
+        this.updateTimerDisplay();
+        this.timerLabel.textContent = 'Work Time';
+        this.timerLabel.classList.remove('break');
+    }
+
+    updateTimerSettings() {
+        if (!this.timerRunning) {
+            this.timerSeconds = parseInt(this.workDuration.value) * 60;
+            this.updateTimerDisplay();
+        }
+    }
+
+    updateTimerDisplay() {
+        const minutes = Math.floor(this.timerSeconds / 60);
+        const seconds = this.timerSeconds % 60;
+        this.timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    onTimerComplete() {
+        this.pauseTimer();
+
+        // Play notification sound and show notification
+        this.playTimerNotification();
+
+        // Toggle between work and break
+        if (this.isBreakTime) {
+            this.isBreakTime = false;
+            this.timerSeconds = parseInt(this.workDuration.value) * 60;
+            this.timerLabel.textContent = 'Work Time';
+            this.timerLabel.classList.remove('break');
+        } else {
+            this.isBreakTime = true;
+            this.timerSeconds = parseInt(this.breakDuration.value) * 60;
+            this.timerLabel.textContent = 'Break Time';
+            this.timerLabel.classList.add('break');
+        }
+
+        this.updateTimerDisplay();
+    }
+
+    playTimerNotification() {
+        // Show browser notification if permitted
+        if (Notification.permission === 'granted') {
+            const title = this.isBreakTime ? 'Work session complete!' : 'Break time over!';
+            const body = this.isBreakTime ? 'Time for a break. Good work!' : 'Ready to focus again?';
+            new Notification(title, { body, icon: '/icons/icon-192.svg' });
+        }
+
+        // Play a simple beep using Web Audio API
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            gainNode.gain.value = 0.3;
+
+            oscillator.start();
+            setTimeout(() => {
+                oscillator.stop();
+                audioContext.close();
+            }, 200);
+        } catch (e) {
+            console.log('Audio notification not available');
+        }
     }
 
     // ============ UTILITIES ============

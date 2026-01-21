@@ -44,7 +44,9 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT NOW(),
         completed_at TIMESTAMP,
         reminder_time TIMESTAMP,
-        reminder_repeat TEXT
+        reminder_repeat TEXT,
+        recurrence TEXT,
+        is_focused BOOLEAN DEFAULT false
       );
     `);
   } finally {

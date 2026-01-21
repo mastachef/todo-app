@@ -83,6 +83,23 @@
                             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
                         </svg>
                     </button>
+                    <!-- Bulk Selection Button -->
+                    <button class="icon-btn" id="bulk-select-btn" title="Select multiple tasks">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7" rx="1"/>
+                            <rect x="14" y="3" width="7" height="7" rx="1"/>
+                            <rect x="3" y="14" width="7" height="7" rx="1"/>
+                            <rect x="14" y="14" width="7" height="7" rx="1"/>
+                        </svg>
+                    </button>
+                    <!-- Focus Mode Button -->
+                    <button class="icon-btn" id="focus-mode-btn" title="Focus mode">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <circle cx="12" cy="12" r="6"/>
+                            <circle cx="12" cy="12" r="2"/>
+                        </svg>
+                    </button>
                     <div class="user-menu-wrapper">
                         <button class="icon-btn" id="user-menu-btn" title="Account">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -93,6 +110,14 @@
                         <!-- User Menu Dropdown -->
                         <div class="user-menu" id="user-menu">
                             <div class="user-info" id="user-info"></div>
+                            <a href="analytics.html" class="user-menu-item" id="analytics-link">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="20" x2="18" y2="10"/>
+                                    <line x1="12" y1="20" x2="12" y2="4"/>
+                                    <line x1="6" y1="20" x2="6" y2="14"/>
+                                </svg>
+                                Analytics
+                            </a>
                             <button class="user-menu-item" id="enable-notifications">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -214,8 +239,13 @@
                 
                 <div class="modal-task-text-container">
                     <input type="text" class="modal-task-text" id="modal-task-text" placeholder="Task description...">
+                    <button type="button" class="focus-toggle" id="focus-toggle" title="Add to focus list">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                    </button>
                 </div>
-                
+
                 <div class="modal-meta" id="modal-meta"></div>
                 
                 <div class="modal-priority-section">
@@ -263,6 +293,18 @@
                     <button type="button" class="clear-reminder-btn" id="clear-reminder">Clear Reminder</button>
                 </div>
 
+                <div class="modal-recurrence-section">
+                    <label class="modal-label">Recurring Task</label>
+                    <select id="recurrence-select" class="reminder-select">
+                        <option value="">No recurrence</option>
+                        <option value="daily">Daily - recreates when completed</option>
+                        <option value="weekly">Weekly - recreates when completed</option>
+                        <option value="monthly">Monthly - recreates when completed</option>
+                        <option value="yearly">Yearly - recreates when completed</option>
+                    </select>
+                    <p class="recurrence-hint">When you complete this task, a new one will be created automatically.</p>
+                </div>
+
                 <div class="modal-notes-section">
                     <label class="modal-label">Notes</label>
                     <textarea class="modal-notes" id="modal-notes" placeholder="Add additional details..." rows="4"></textarea>
@@ -301,6 +343,121 @@
             </div>
         </div>
     </div>
+
+    <!-- Focus Mode Overlay -->
+    <div class="focus-overlay" id="focus-overlay" style="display: none;">
+        <div class="focus-container">
+            <header class="focus-header">
+                <h2 class="focus-title">Focus Mode</h2>
+                <button class="focus-close" id="focus-close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </header>
+
+            <!-- Pomodoro Timer -->
+            <div class="pomodoro-timer">
+                <div class="timer-display" id="timer-display">25:00</div>
+                <div class="timer-label" id="timer-label">Work Time</div>
+                <div class="timer-controls">
+                    <button class="timer-btn" id="timer-start">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        Start
+                    </button>
+                    <button class="timer-btn" id="timer-pause" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="4" width="4" height="16"/>
+                            <rect x="14" y="4" width="4" height="16"/>
+                        </svg>
+                        Pause
+                    </button>
+                    <button class="timer-btn secondary" id="timer-reset">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                            <path d="M3 3v5h5"/>
+                        </svg>
+                        Reset
+                    </button>
+                </div>
+                <div class="timer-settings">
+                    <label>
+                        <span>Work:</span>
+                        <input type="number" id="work-duration" value="25" min="1" max="60"> min
+                    </label>
+                    <label>
+                        <span>Break:</span>
+                        <input type="number" id="break-duration" value="5" min="1" max="30"> min
+                    </label>
+                </div>
+            </div>
+
+            <!-- Focused Tasks List -->
+            <div class="focus-tasks-section">
+                <h3 class="focus-tasks-title">Focused Tasks</h3>
+                <ul class="focus-tasks-list" id="focus-tasks-list"></ul>
+                <p class="focus-empty" id="focus-empty" style="display: none;">
+                    No tasks in focus. Open a task and click the star to add it to your focus list.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Action Bar -->
+    <div class="bulk-action-bar" id="bulk-action-bar" style="display: none;">
+        <div class="bulk-action-info">
+            <button class="bulk-cancel-btn" id="bulk-cancel-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+            <span class="bulk-count" id="bulk-count">0 selected</span>
+        </div>
+        <div class="bulk-actions">
+            <button class="bulk-action-btn" id="bulk-complete-btn" title="Mark complete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span>Complete</span>
+            </button>
+            <button class="bulk-action-btn" id="bulk-move-btn" title="Move to list">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>Move</span>
+            </button>
+            <button class="bulk-action-btn bulk-delete" id="bulk-delete-btn" title="Delete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                <span>Delete</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Bulk Move Modal -->
+    <div class="modal-overlay" id="bulk-move-modal" style="display: none;">
+        <div class="modal-content bulk-move-modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Move to List</h3>
+                <button class="modal-close" id="bulk-move-modal-close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="bulk-move-list" id="bulk-move-list"></div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
 
     <!-- Search Modal -->
     <div class="modal-overlay" id="search-modal">

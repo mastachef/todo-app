@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Analytics - My Tasks</title>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Theme Colors -->
+    <meta name="theme-color" content="#e07a5f">
+    <meta name="msapplication-TileColor" content="#e07a5f">
+
+    <!-- iOS PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Todo">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23e07a5f' width='100' height='100' rx='20'/%3E%3Cpath fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' d='M25 50l15 15 35-35'/%3E%3C/svg%3E">
+
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <style>
+        .analytics-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        .analytics-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem;
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all var(--transition);
+        }
+
+        .back-btn:hover {
+            background: var(--bg-input);
+            color: var(--text-primary);
+        }
+
+        .back-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .analytics-title {
+            font-family: var(--font-serif);
+            font-size: 1.75rem;
+            color: var(--text-primary);
+            flex: 1;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: var(--font-serif);
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: var(--accent);
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .chart-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-title {
+            font-family: var(--font-serif);
+            font-size: 1.125rem;
+            color: var(--text-primary);
+            margin-bottom: 1.25rem;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .bar-label {
+            width: 80px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .bar-container {
+            flex: 1;
+            height: 24px;
+            background: var(--bg-hover);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: var(--radius-sm);
+            transition: width 0.5s ease;
+        }
+
+        .bar-fill.priority-high { background: var(--danger); }
+        .bar-fill.priority-medium { background: var(--warning); }
+        .bar-fill.priority-low { background: var(--success); }
+        .bar-fill.priority-none { background: var(--text-muted); }
+        .bar-fill.list { background: var(--accent); }
+
+        .bar-value {
+            width: 40px;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+
+        .completion-rate {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            padding: 1rem;
+        }
+
+        .rate-circle {
+            width: 120px;
+            height: 120px;
+            position: relative;
+        }
+
+        .rate-circle svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+
+        .rate-circle-bg {
+            fill: none;
+            stroke: var(--bg-hover);
+            stroke-width: 10;
+        }
+
+        .rate-circle-fill {
+            fill: none;
+            stroke: var(--success);
+            stroke-width: 10;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+
+        .rate-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .rate-value {
+            font-family: var(--font-serif);
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .rate-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .rate-details {
+            text-align: left;
+        }
+
+        .rate-detail-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .rate-detail-item strong {
+            color: var(--text-primary);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .stat-value {
+                font-size: 2rem;
+            }
+
+            .completion-rate {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="analytics-container">
+        <header class="analytics-header">
+            <a href="index.html" class="back-btn" title="Back to tasks">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="19" y1="12" x2="5" y2="12"/>
+                    <polyline points="12 19 5 12 12 5"/>
+                </svg>
+            </a>
+            <h1 class="analytics-title">Analytics</h1>
+            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"/>
+                    <line x1="12" y1="1" x2="12" y2="3"/>
+                    <line x1="12" y1="21" x2="12" y2="23"/>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                    <line x1="1" y1="12" x2="3" y2="12"/>
+                    <line x1="21" y1="12" x2="23" y2="12"/>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+            </button>
+        </header>
+
+        <div id="analytics-content">
+            <p class="loading">Loading analytics...</p>
+        </div>
+    </div>
+
+    <script src="analytics.js"></script>
+</body>
+</html>
