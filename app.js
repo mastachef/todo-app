@@ -890,13 +890,7 @@ class TaskManager {
     }
     
     async addTask(text) {
-        // Ensure tasks is an array
-        if (!Array.isArray(this.tasks)) {
-            this.tasks = [];
-        }
-
         const task = {
-            id: this.generateId(), // Always generate local ID first
             list_id: this.currentListId,
             text,
             notes: '',
@@ -908,13 +902,11 @@ class TaskManager {
             reminder_repeat: null
         };
 
-        // IMMEDIATELY add to array and save to localStorage
-        this.tasks.unshift(task);
-        this.saveToLocalStorage();
-        this.render();
-        this.newTaskInput.focus();
+        // Ensure tasks is an array
+        if (!Array.isArray(this.tasks)) {
+            this.tasks = [];
+        }
 
-        // Then sync to server in background
         if (this.isOnline) {
             try {
                 const res = await fetch(`${this.API_BASE}/api-tasks`, {
@@ -925,26 +917,38 @@ class TaskManager {
 
                 if (res.ok) {
                     const created = await res.json();
-                    // Update local task with server ID
-                    const idx = this.tasks.findIndex(t => t.id === task.id);
-                    if (idx !== -1) {
-                        created.completed = !!created.completed;
-                        if (created.list_id !== undefined) {
-                            created.list_id = Number(created.list_id);
-                        }
-                        this.tasks[idx] = created;
-                        this.saveToLocalStorage();
+                    created.completed = !!created.completed;
+                    if (created.list_id !== undefined) {
+                        created.list_id = Number(created.list_id);
                     }
-                } else if (res.status === 401) {
-                    this.saveAuthToken(null);
-                    this.isOnline = false;
-                    this.user = null;
+                    this.tasks.unshift(created);
+                } else {
+                    console.error('Failed to create task:', res.status);
+                    if (res.status === 401) {
+                        this.saveAuthToken(null);
+                        this.isOnline = false;
+                        this.user = null;
+                        this.loadFromLocalStorage();
+                    }
+                    task.id = this.generateId();
+                    this.tasks.unshift(task);
+                    this.saveToLocalStorage();
                 }
             } catch (e) {
-                console.error('Error syncing task to server:', e);
-                // Task is already saved locally, so no action needed
+                console.error('Error creating task:', e);
+                this.isOnline = false;
+                task.id = this.generateId();
+                this.tasks.unshift(task);
+                this.saveToLocalStorage();
             }
+        } else {
+            task.id = this.generateId();
+            this.tasks.unshift(task);
+            this.saveToLocalStorage();
         }
+
+        this.render();
+        this.newTaskInput.focus();
     }
     
     async updateTask(id, updates) {
