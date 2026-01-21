@@ -63,7 +63,7 @@ export async function handler(event) {
     return errorResponse(405, 'Method not allowed');
   } catch (err) {
     console.error('Tasks error:', err);
-    return errorResponse(500, 'Server error');
+    return errorResponse(500, 'Server error: ' + err.message);
   }
 }
 
