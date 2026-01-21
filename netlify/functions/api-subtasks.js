@@ -23,10 +23,15 @@ export async function handler(event) {
     const params = event.queryStringParameters || {};
     const taskId = params.task_id;
 
-    // GET - Get all subtasks for a task
+    // GET - Get subtasks (all or for specific task)
     if (event.httpMethod === 'GET') {
+      // If no task_id, return ALL subtasks for this user (for initial load/sync)
       if (!taskId) {
-        return errorResponse(400, 'Task ID required');
+        const allSubtasks = await db.queryAll(
+          'SELECT * FROM subtasks WHERE user_id = $1 ORDER BY task_id, sort_order ASC, created_at ASC',
+          [userId]
+        );
+        return jsonResponse(200, allSubtasks);
       }
 
       // Verify task belongs to user

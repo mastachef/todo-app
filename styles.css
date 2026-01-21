@@ -1659,6 +1659,13 @@ body {
 }
 
 /* Task Content */
+.task-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .task-content {
     flex: 1;
     min-width: 0;
@@ -2176,6 +2183,50 @@ body {
     color: var(--success);
 }
 
+/* Inline subtasks in task list */
+.inline-subtasks {
+    list-style: none;
+    margin: 0.5rem 0 0 1.75rem;
+    padding: 0;
+    border-left: 2px solid var(--border);
+    padding-left: 0.75rem;
+}
+
+.inline-subtask {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    font-size: 0.875rem;
+}
+
+.inline-subtask.completed .inline-subtask-text {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
+.inline-subtask-checkbox {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.inline-subtask-checkbox input {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    accent-color: var(--accent);
+}
+
+.inline-subtask-text {
+    color: var(--text-secondary);
+}
+
+.task-item.has-subtasks .task-main {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
 .modal-input {
     width: 100%;
     border: 1px solid var(--border);
@@ -2302,13 +2353,23 @@ body {
         width: 28px;
         height: 28px;
     }
-    
+
     .task-item {
         padding: 1rem 0.5rem;
     }
-    
+
     .list-tab {
         padding: 0.75rem 1rem;
+    }
+
+    /* Mobile-friendly inline subtasks */
+    .inline-subtask {
+        padding: 0.5rem 0;
+    }
+
+    .inline-subtask-checkbox input {
+        width: 18px;
+        height: 18px;
     }
 }
 

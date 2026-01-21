@@ -301,11 +301,12 @@ class TaskManager {
     
     async loadFromServer() {
         try {
-            const [listsRes, tasksRes] = await Promise.all([
+            const [listsRes, tasksRes, subtasksRes] = await Promise.all([
                 fetch(`${this.API_BASE}/api-lists`, { headers: this.getAuthHeaders() }),
-                fetch(`${this.API_BASE}/api-tasks`, { headers: this.getAuthHeaders() })
+                fetch(`${this.API_BASE}/api-tasks`, { headers: this.getAuthHeaders() }),
+                fetch(`${this.API_BASE}/api-subtasks`, { headers: this.getAuthHeaders() })
             ]);
-            
+
             if (!listsRes.ok || !tasksRes.ok) {
                 // If 401, token expired
                 if (listsRes.status === 401 || tasksRes.status === 401) {
@@ -319,9 +320,10 @@ class TaskManager {
                 }
                 throw new Error('Unauthorized or server error');
             }
-            
+
             const listsData = await listsRes.json();
             const tasksData = await tasksRes.json();
+            const subtasksData = subtasksRes.ok ? await subtasksRes.json() : [];
             
             // Ensure they are arrays before assigning
             this.lists = Array.isArray(listsData) ? listsData : [];
@@ -339,12 +341,28 @@ class TaskManager {
                 ...l,
                 id: Number(l.id)
             }));
-            
+
+            // Process subtasks - group by task_id and sync to localStorage
+            this.subtasks = {};
+            if (Array.isArray(subtasksData)) {
+                subtasksData.forEach(st => {
+                    const taskId = st.task_id;
+                    if (!this.subtasks[taskId]) {
+                        this.subtasks[taskId] = [];
+                    }
+                    this.subtasks[taskId].push(st);
+                });
+                // Sync subtasks to localStorage for offline use
+                Object.keys(this.subtasks).forEach(taskId => {
+                    localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
+                });
+            }
+
             // Normalize currentListId
             if (this.currentListId !== null) {
                 this.currentListId = Number(this.currentListId);
             }
-            
+
             if (this.lists.length === 0) {
                 await this.createList('My Tasks');
             }
@@ -1167,6 +1185,9 @@ class TaskManager {
     // ============ RENDERING ============
     
     render() {
+        // Load subtasks from localStorage for all tasks (for inline display)
+        this.loadAllSubtasksFromStorage();
+
         const listTasks = this.getListTasks();
         let activeTasks = listTasks.filter(t => !t.completed);
         let completedTasks = listTasks.filter(t => t.completed);
@@ -1216,12 +1237,26 @@ class TaskManager {
         const selectionModeClass = this.selectionMode ? 'selection-mode' : '';
         const selectedClass = isSelected ? 'selected' : '';
 
-        // Get subtask stats
-        const subtaskStats = this.getSubtaskStats(task.id);
-        const subtaskIndicator = subtaskStats ? `<span class="task-subtasks-indicator ${subtaskStats.completed === subtaskStats.total ? 'has-completed' : ''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> ${subtaskStats.completed}/${subtaskStats.total}</span>` : '';
+        // Get subtasks for inline display
+        const subtasks = this.subtasks[task.id] || [];
+        const hasSubtasks = subtasks.length > 0;
+
+        // Build inline subtasks HTML
+        const inlineSubtasksHTML = hasSubtasks ? `
+            <ul class="inline-subtasks" data-task-id="${task.id}">
+                ${subtasks.map(st => `
+                    <li class="inline-subtask ${st.completed ? 'completed' : ''}" data-subtask-id="${st.id}">
+                        <label class="inline-subtask-checkbox" onclick="event.stopPropagation()">
+                            <input type="checkbox" ${st.completed ? 'checked' : ''}>
+                        </label>
+                        <span class="inline-subtask-text">${this.escapeHTML(st.text)}</span>
+                    </li>
+                `).join('')}
+            </ul>
+        ` : '';
 
         return `
-            <li class="task-item ${task.completed ? 'completed' : ''} ${selectionModeClass} ${selectedClass}" data-id="${task.id}">
+            <li class="task-item ${task.completed ? 'completed' : ''} ${selectionModeClass} ${selectedClass} ${hasSubtasks ? 'has-subtasks' : ''}" data-id="${task.id}">
                 <label class="task-selection-checkbox" onclick="event.stopPropagation()">
                     <input type="checkbox" ${isSelected ? 'checked' : ''}>
                 </label>
@@ -1231,13 +1266,15 @@ class TaskManager {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>
                     </span>
                 </label>
-                <button type="button" class="task-content" onclick="window.taskManager.openTaskModal('${task.id}')">
-                    <p class="task-text">${this.escapeHTML(task.text)}${task.is_focused ? `<span class="task-focused-indicator"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}</p>
-                    ${hasNotes ? `<p class="task-notes-preview">${this.escapeHTML(notesPreview)}</p>` : ''}
-                    ${hasReminder ? `<span class="task-reminder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Reminder set</span>` : ''}
-                    ${hasRecurrence ? `<span class="task-recurrence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H4.2"/></svg> ${recurrenceLabels[task.recurrence] || task.recurrence}</span>` : ''}
-                    ${subtaskIndicator}
-                </button>
+                <div class="task-main">
+                    <button type="button" class="task-content" onclick="window.taskManager.openTaskModal('${task.id}')">
+                        <p class="task-text">${this.escapeHTML(task.text)}${task.is_focused ? `<span class="task-focused-indicator"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>` : ''}</p>
+                        ${hasNotes ? `<p class="task-notes-preview">${this.escapeHTML(notesPreview)}</p>` : ''}
+                        ${hasReminder ? `<span class="task-reminder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Reminder set</span>` : ''}
+                        ${hasRecurrence ? `<span class="task-recurrence"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H4.2"/></svg> ${recurrenceLabels[task.recurrence] || task.recurrence}</span>` : ''}
+                    </button>
+                    ${inlineSubtasksHTML}
+                </div>
                 ${priorityFlag}
             </li>
         `;
@@ -1262,12 +1299,22 @@ class TaskManager {
             });
         });
 
+        // Inline subtask checkboxes
+        document.querySelectorAll('.inline-subtask-checkbox input').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const subtaskId = e.target.closest('.inline-subtask').dataset.subtaskId;
+                const taskId = e.target.closest('.inline-subtasks').dataset.taskId;
+                this.toggleInlineSubtask(taskId, subtaskId);
+            });
+        });
+
         // In selection mode, clicking anywhere on the task toggles selection
         if (this.selectionMode) {
             document.querySelectorAll('.task-item').forEach(item => {
                 item.addEventListener('click', (e) => {
-                    // Don't toggle if clicking the content button (to open modal)
-                    if (!e.target.closest('.task-content') && !e.target.closest('.task-checkbox')) {
+                    // Don't toggle if clicking the content button (to open modal) or subtasks
+                    if (!e.target.closest('.task-content') && !e.target.closest('.task-checkbox') && !e.target.closest('.inline-subtask')) {
                         const id = item.dataset.id;
                         this.toggleTaskSelection(id);
                     }
@@ -2108,6 +2155,25 @@ class TaskManager {
 
     // ============ SUBTASKS ============
 
+    // Load all subtasks from localStorage for rendering
+    loadAllSubtasksFromStorage() {
+        this.tasks.forEach(task => {
+            // Only load if not already in memory
+            if (!this.subtasks[task.id]) {
+                const stored = localStorage.getItem(`subtasks_${task.id}`);
+                if (stored) {
+                    try {
+                        this.subtasks[task.id] = JSON.parse(stored);
+                    } catch (e) {
+                        this.subtasks[task.id] = [];
+                    }
+                } else {
+                    this.subtasks[task.id] = [];
+                }
+            }
+        });
+    }
+
     async loadSubtasks(taskId) {
         this.subtaskInput.value = '';
         let loadedFromApi = false;
@@ -2280,6 +2346,32 @@ class TaskManager {
 
         this.renderSubtasks();
         this.render(); // Update task list
+    }
+
+    async toggleInlineSubtask(taskId, subtaskId) {
+        const subtasks = this.subtasks[taskId] || [];
+        const subtask = subtasks.find(st => String(st.id) === String(subtaskId));
+
+        if (!subtask) return;
+
+        subtask.completed = !subtask.completed;
+
+        if (this.isOnline) {
+            try {
+                await fetch(`${this.API_BASE}/api-subtasks-id/${subtaskId}`, {
+                    method: 'PUT',
+                    headers: this.getAuthHeaders(),
+                    body: JSON.stringify({ completed: subtask.completed })
+                });
+            } catch (e) {
+                console.error('Failed to toggle subtask:', e);
+            }
+        }
+
+        // Always save to localStorage as backup
+        localStorage.setItem(`subtasks_${taskId}`, JSON.stringify(this.subtasks[taskId]));
+
+        this.render(); // Re-render to update the inline subtask display
     }
 
     getSubtaskStats(taskId) {
